@@ -445,6 +445,7 @@ class VistaTutores extends StatelessWidget {
                   'descripcion': descripcionController.text.trim(),
                   'fecha': FieldValue.serverTimestamp(),
                 });
+                
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('¡Ya eres parte del equipo de tutores!')),
