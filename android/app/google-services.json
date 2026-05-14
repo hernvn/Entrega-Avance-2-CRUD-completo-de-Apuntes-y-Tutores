@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "250226462789",
+    "project_id": "campusync-base",
+    "storage_bucket": "campusync-base.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:250226462789:android:3048228c1abe217d9a532c",
+        "android_client_info": {
+          "package_name": "com.compusSync"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "250226462789-6qksbpq93ci2n6a8sl1uv93qkk3dbdqn.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.compusSync",
+            "certificate_hash": "18bd45b8b95bac25351d1c1ed9f91ed57ff0ee1b"
+          }
+        },
+        {
+          "client_id": "250226462789-b7c8hd1vocpaqd6887u613j5uui80j1m.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhYglLwYfwlGfJxsM3-1D9uYpPBpY8ACs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "250226462789-b7c8hd1vocpaqd6887u613j5uui80j1m.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
