@@ -84,7 +84,7 @@ class _PantallaLoginState extends State<PantallaLogin> {
         password: _passController.text,
       );
 
-      // 3. REVISAR SI EL CORREO ESTÁ VALIDADO (Punto 7 y 14)
+
       if (userCredential.user != null && !userCredential.user!.emailVerified) {
         // Si no está validado, se cuerra la sesión para que no quede "atrapado" logueado a medias
         await FirebaseAuth.instance.signOut();
@@ -146,6 +146,7 @@ class _PantallaLoginState extends State<PantallaLogin> {
                 const SizedBox(height: 20),
                 TextField(
                   controller: _userController,
+                  autofocus: true,
                   decoration: const InputDecoration(labelText: 'Correo Institucional', border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 15),
@@ -907,9 +908,17 @@ class PantallaPerfil extends StatefulWidget {
 class _PantallaPerfilState extends State<PantallaPerfil> {
   final User? user = FirebaseAuth.instance.currentUser;
 
+  bool _esContrasenaSegura(String password) {
+    if (password.length < 8) return false;
+    if (!password.contains(RegExp(r'[A-Z]'))) return false;
+    if (!password.contains(RegExp(r'[a-z]'))) return false;
+    if (!password.contains(RegExp(r'[0-9]'))) return false;
+    if (!password.contains(RegExp(r'[^a-zA-Z0-9]'))) return false;
+    return true;
+  }
+
   void _editarNombre() {
     TextEditingController nombreController = TextEditingController(text: user?.displayName ?? '');
-
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -917,6 +926,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
           title: const Text('Editar Nombre'),
           content: TextField(
             controller: nombreController,
+            autofocus: true,
             decoration: const InputDecoration(hintText: "Ingresa tu nuevo nombre"),
           ),
           actions: [
@@ -948,6 +958,73 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     );
   }
 
+  void _mostrarDialogoCambiarClave() {
+    final TextEditingController claveActualController = TextEditingController();
+    final TextEditingController claveNuevaController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cambiar Contraseña'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: claveActualController,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Contraseña Actual', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: claveNuevaController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Nueva Contraseña', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () async {
+              if (claveActualController.text.trim().isEmpty || claveNuevaController.text.trim().isEmpty) return;
+              
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
+              
+              if (!_esContrasenaSegura(claveNuevaController.text)) {
+                scaffoldMessenger.showSnackBar(
+                  const SnackBar(content: Text('La clave debe tener 8+ caracteres, Mayús, Núm y Símbolo.'), backgroundColor: Colors.orange),
+                );
+                return;
+              }
+              
+              final user = FirebaseAuth.instance.currentUser;
+              if (user == null || user.email == null) return;
+              final navigator = Navigator.of(dialogContext);
+              
+              try {
+                await FirebaseAuth.instance.signInWithEmailAndPassword(
+                  email: user.email!,
+                  password: claveActualController.text,
+                );
+                await user.updatePassword(claveNuevaController.text.trim());
+                navigator.pop();
+                scaffoldMessenger.showSnackBar(
+                  const SnackBar(content: Text('Contraseña actualizada con éxito'), backgroundColor: Colors.green),
+                );
+              } catch (e) {
+                scaffoldMessenger.showSnackBar(
+                  const SnackBar(content: Text('Error: Verifica tu contraseña actual'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('Actualizar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _confirmarCerrarSesion(BuildContext context) {
     showDialog(
       context: context,
@@ -975,6 +1052,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
 
   @override
   Widget build(BuildContext context) {
+    bool esUsuarioGoogle = user?.providerData.any((provider) => provider.providerId == 'google.com') ?? false;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Mi Perfil')),
       body: ListView(
@@ -996,6 +1075,14 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
             icon: const Icon(Icons.edit),
             label: const Text('Editar Nombre'),
           ),
+          if (!esUsuarioGoogle) ...[
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _mostrarDialogoCambiarClave,
+              icon: const Icon(Icons.lock_reset),
+              label: const Text('Cambiar Contraseña'),
+            ),
+          ],
           const SizedBox(height: 20),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade50, foregroundColor: Colors.red),
@@ -1008,7 +1095,6 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     );
   }
 }
-
 
 // NUEVA PANTALLA REGISTRO
 
