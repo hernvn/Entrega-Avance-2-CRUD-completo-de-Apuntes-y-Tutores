@@ -3,6 +3,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart' as google_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'vistas/pantalla_cursos.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -205,12 +207,13 @@ class PantallaInicio extends StatefulWidget {
 class _PantallaInicioState extends State<PantallaInicio> {
   int _indiceActual = 0;
 
-  // Lista de las 4 pantallas principales de la aplicación
+  // Pantallas principales
   final List<Widget> _paginas = [
     const VistaApuntes(),
     const VistaTutores(),
     const VistaSubir(),
     const PantallaPerfil(), 
+    const PantallaCursos(),
   ];
 
   @override
@@ -251,6 +254,11 @@ class _PantallaInicioState extends State<PantallaInicio> {
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person, color: Colors.blue),
             label: 'Perfil',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.school_outlined),
+            selectedIcon: Icon(Icons.school, color: Colors.blue),
+            label: 'Cursos',
           ),
         ],
       ),
