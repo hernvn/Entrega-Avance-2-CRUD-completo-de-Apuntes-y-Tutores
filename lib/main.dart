@@ -948,6 +948,31 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     );
   }
 
+  void _confirmarCerrarSesion(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('¿Cerrar sesión?'),
+        content: const Text('¿Estás seguro de que deseas salir de CampusSync?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(dialogContext); // Cierra el diálogo antes de la mutación de estado
+              await google_auth.GoogleSignIn().signOut();
+              await FirebaseAuth.instance.signOut();
+            },
+            child: const Text('Cerrar Sesión'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -974,11 +999,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
           const SizedBox(height: 20),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade50, foregroundColor: Colors.red),
-            onPressed: () async {
-              // Revoca la autorización local de la cuenta de Google para forzar el selector en el próximo login
-              await google_auth.GoogleSignIn().signOut();
-              await FirebaseAuth.instance.signOut();
-            },
+            onPressed: () => _confirmarCerrarSesion(context),
             icon: const Icon(Icons.logout),
             label: const Text('Cerrar Sesión'),
           ),
