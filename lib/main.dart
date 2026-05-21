@@ -1088,50 +1088,53 @@ class _PantallaRegistroState extends State<PantallaRegistro> {
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(30.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.school, size: 100, color: Colors.blue),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(labelText: 'Correo Institucional', border: OutlineInputBorder()),
+      body: Center(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(30.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.school, size: 100, color: Colors.blue),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(labelText: 'Correo Institucional', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 15),
+                TextField(
+                  controller: _passController,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Contraseña', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 15),
+                TextField(
+                  controller: _confirmPassController,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Confirmar Contraseña', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                Text(_mensajeError, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
+                  onPressed: _registrar,
+                  child: const Text('Registrarse'),
+                ),
+                const SizedBox(height: 15),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white, 
+                    foregroundColor: Colors.black, 
+                    minimumSize: const Size(double.infinity, 50)
+                  ),
+                  icon: const Icon(Icons.g_mobiledata, size: 30, color: Colors.blue),
+                  label: const Text('Registrarse con Google'),
+                  onPressed: _ingresarConGoogle,
+                ),
+              ],
             ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _passController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Contraseña', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _confirmPassController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Confirmar Contraseña', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 10),
-            Text(_mensajeError, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
-              onPressed: _registrar,
-              child: const Text('Registrarse'),
-            ),
-            // Dentro del Column de tu PantallaRegistro
-            const SizedBox(height: 15),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white, 
-                foregroundColor: Colors.black, 
-                minimumSize: const Size(double.infinity, 50)
-              ),
-              icon: const Icon(Icons.g_mobiledata, size: 30, color: Colors.blue),
-              label: const Text('Registrarse con Google'), // Texto explícito para la rúbrica
-              onPressed: _ingresarConGoogle, // Reutilizas la función que ya funciona
-            ),
-          ],
+          ),
         ),
       ),
     );
