@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart' as google_auth;
@@ -86,7 +86,7 @@ class _PantallaLoginState extends State<PantallaLogin> {
 
       // 3. REVISAR SI EL CORREO ESTÁ VALIDADO (Punto 7 y 14)
       if (userCredential.user != null && !userCredential.user!.emailVerified) {
-        // Si no está validado, cerramos la sesión para que no quede "atrapado" logueado a medias
+        // Si no está validado, se cuerra la sesión para que no quede "atrapado" logueado a medias
         await FirebaseAuth.instance.signOut();
         setState(() => _mensajeError = 'Debes verificar tu correo antes de entrar. Revisa tu bandeja de entrada.');
         return;
@@ -107,21 +107,17 @@ class _PantallaLoginState extends State<PantallaLogin> {
 
   void _ingresarConGoogle() async {
     try {
-      // Obligamos a Dart a usar exclusivamente el paquete con el alias 'google_auth'
       final google_auth.GoogleSignIn googleSignIn = google_auth.GoogleSignIn();
       final google_auth.GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      
       if (googleUser == null) return; 
-
-      // Usamos el alias también para la autenticación
       final google_auth.GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       final AuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
-
       await FirebaseAuth.instance.signInWithCredential(credential);
-      
+      // Fuerza la purga de cualquier ruta apilada para exponer el redibujado del StreamBuilder raíz
+      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -213,7 +209,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
     const VistaApuntes(),
     const VistaTutores(),
     const VistaSubir(),
-    const PantallaPerfil(), // Tu pantalla de perfil que ya funciona
+    const PantallaPerfil(), 
   ];
 
   @override
@@ -222,11 +218,11 @@ class _PantallaInicioState extends State<PantallaInicio> {
       appBar: AppBar(
         title: const Text('CampusSync', style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
-        automaticallyImplyLeading: false, // Oculta la flecha de retroceso
+        automaticallyImplyLeading: false, 
       ),
-      body: _paginas[_indiceActual], // Muestra la vista correspondiente al índice
+      body: _paginas[_indiceActual], 
       
-      // Implementación estricta de NavigationBar (Material 3)
+   
       bottomNavigationBar: NavigationBar(
         selectedIndex: _indiceActual,
         onDestinationSelected: (int index) {
@@ -261,7 +257,6 @@ class _PantallaInicioState extends State<PantallaInicio> {
   }
 }
 
-// --- VISTAS TEMPORALES PARA QUE EL CÓDIGO COMPILE ---
 
 class VistaApuntes extends StatelessWidget {
   const VistaApuntes({super.key});
@@ -408,7 +403,6 @@ class VistaApuntes extends StatelessWidget {
 class VistaTutores extends StatelessWidget {
   const VistaTutores({super.key});
 
-  // Función para mostrar el formulario de postulación
   void _mostrarFormularioTutor(BuildContext context) {
     TextEditingController especialidadController = TextEditingController();
     TextEditingController descripcionController = TextEditingController();
@@ -446,6 +440,7 @@ class VistaTutores extends StatelessWidget {
                   'fecha': FieldValue.serverTimestamp(),
                 });
                 
+                if (!context.mounted) return;
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('¡Ya eres parte del equipo de tutores!')),
@@ -546,7 +541,7 @@ class VistaTutores extends StatelessWidget {
           );
         },
       ),
-      // Botón para que cualquier alumno pueda publicar su perfil
+     
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _mostrarFormularioTutor(context),
         label: const Text('Ser Tutor'),
@@ -569,11 +564,11 @@ class _VistaSubirState extends State<VistaSubir> {
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _materiaController = TextEditingController();
   
-  // Estado de carga (Punto 10 de la rúbrica)
+  // Estado de carga 
   bool _estaCargando = false;
 
   void _guardarApunte() async {
-    // Validaciones antes de guardar (Punto 8)
+    // Validaciones antes de guardar 
     if (_nombreController.text.trim().isEmpty || _materiaController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Por favor, completa todos los campos.'), backgroundColor: Colors.red),
@@ -584,11 +579,11 @@ class _VistaSubirState extends State<VistaSubir> {
     setState(() => _estaCargando = true);
 
     try {
-      // Asociar datos al usuario autenticado (Punto 5)
+      // Asociar datos al usuario autenticado
       final User? usuario = FirebaseAuth.instance.currentUser;
       if (usuario == null) throw Exception('Debes iniciar sesión para subir material');
 
-      // Crear registro en Firestore (Punto 4 - Letra C del CRUD)
+      // Crear registro en Firestore 
       await FirebaseFirestore.instance.collection('apuntes').add({
         'nombre_archivo': _nombreController.text.trim(),
         'materia': _materiaController.text.trim(),
@@ -597,7 +592,7 @@ class _VistaSubirState extends State<VistaSubir> {
         'fecha_subida': FieldValue.serverTimestamp(), // Hora exacta del servidor
       });
 
-      // Mensaje de éxito y limpieza de formulario (Punto 9)
+      // Mensaje de éxito y limpieza de formulario 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('¡Material guardado exitosamente!'), backgroundColor: Colors.green),
@@ -653,7 +648,12 @@ class _VistaSubirState extends State<VistaSubir> {
                 foregroundColor: Colors.blue.shade700,
                 elevation: 0,
               ),
-              // Si está cargando, desactivamos el botón para evitar clics dobles
+             
+             
+
+
+
+             
               onPressed: _estaCargando ? null : _guardarApunte,
               child: _estaCargando
                   ? const SizedBox(height: 25, width: 25, child: CircularProgressIndicator()) // Punto 10
@@ -975,8 +975,9 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade50, foregroundColor: Colors.red),
             onPressed: () async {
+              // Revoca la autorización local de la cuenta de Google para forzar el selector en el próximo login
+              await google_auth.GoogleSignIn().signOut();
               await FirebaseAuth.instance.signOut();
-              // El StreamBuilder en main.dart se encargará de mandarte al Login automáticamente
             },
             icon: const Icon(Icons.logout),
             label: const Text('Cerrar Sesión'),
@@ -1023,70 +1024,57 @@ class _PantallaRegistroState extends State<PantallaRegistro> {
   }
 
   void _registrar() async {
-    // 1. Validar campos vacíos (Punto 19 de la rúbrica)
-    if (_emailController.text.trim().isEmpty || 
-        _passController.text.trim().isEmpty || 
-        _confirmPassController.text.trim().isEmpty) {
+    if (_emailController.text.trim().isEmpty || _passController.text.trim().isEmpty || _confirmPassController.text.trim().isEmpty) {
       setState(() => _mensajeError = 'Todos los campos son obligatorios.');
       return;
     }
-
-    // 2. USAR LA FUNCIÓN (Esto quita la advertencia amarilla)
     if (!_esCorreoValido(_emailController.text.trim())) {
       setState(() => _mensajeError = 'Formato de correo inválido.');
       return;
     }
-
-    // 3. VALIDAR CONTRASEÑA SEGURA (Esto quita la otra advertencia)
     if (!_esContrasenaSegura(_passController.text)) {
       setState(() => _mensajeError = 'La contraseña debe ser más segura (8+ caracteres, Mayús, Núm, Símbolo).');
       return;
     }
-
-    // 4. Validar confirmación (Punto 6)
     if (_passController.text != _confirmPassController.text) {
       setState(() => _mensajeError = 'Las contraseñas no coinciden.');
       return;
     }
-
     try {
       UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passController.text,
       );
-
-      // Enviar verificación (Punto 7)
       await userCredential.user?.sendEmailVerification();
-
+      // Destruye la sesión automática de Firebase tras registro para evitar bloqueos del StreamBuilder por falta de verificación
+      await FirebaseAuth.instance.signOut();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Registro exitoso. Revisa tu correo.')), 
+          const SnackBar(content: Text('Registro exitoso. Revisa tu correo para verificar y luego inicia sesión.')),
         );
-        Navigator.pop(context);
+        if (Navigator.canPop(context)) Navigator.pop(context);
       }
     } on FirebaseAuthException catch (e) {
-      // Usar 'e' para que se vaya la advertencia azul (Punto 9)
       setState(() => _mensajeError = 'Error: ${e.message}');
     }
   }
-
   void _ingresarConGoogle() async {
     try {
       final google_auth.GoogleSignIn googleSignIn = google_auth.GoogleSignIn();
       final google_auth.GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) return;
-
       final google_auth.GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       final AuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
-      // Al usar signInWithCredential, Firebase crea al usuario si no existe (Punto 8)
       await FirebaseAuth.instance.signInWithCredential(credential);
+      // Asegura la destrucción de la capa de registro actual permitiendo que el StreamBuilder muestre PantallaInicio
+      if (mounted && Navigator.canPop(context)) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al registrar con Google: $e')) // Mensaje en español (Punto 9)
+          SnackBar(content: Text('Error al registrar con Google: $e'))
         );
       }
     }
