@@ -536,8 +536,6 @@ class VistaTutores extends StatelessWidget {
                   title: Text(tutor['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text('${tutor['especialidad']}\n${tutor['descripcion']}'),
                   isThreeLine: true,
-                  // Solo el dueño puede ver el botón para eliminar su anuncio
-                  // Busca esta parte dentro de tu ListView.builder:
                   trailing: uidActual == tutor['uid']
                       ? IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
@@ -914,7 +912,7 @@ class PantallaPerfil extends StatefulWidget {
 }
 
 class _PantallaPerfilState extends State<PantallaPerfil> {
-  final User? user = FirebaseAuth.instance.currentUser;
+  User? user = FirebaseAuth.instance.currentUser;
 
   bool _esContrasenaSegura(String password) {
     if (password.length < 8) return false;
@@ -952,7 +950,10 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   Navigator.pop(dialogContext);
                   
                   if (!mounted) return;
-                  setState(() {});
+                  setState(() {
+                    user = FirebaseAuth.instance.currentUser; 
+                  });
+                  
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Nombre actualizado en Firebase')),
                   );
