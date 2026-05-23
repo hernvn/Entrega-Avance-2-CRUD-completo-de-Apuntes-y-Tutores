@@ -18,252 +18,167 @@ class PantallaDetalleCurso extends StatefulWidget {
 
 class _PantallaDetalleCursoState extends State<PantallaDetalleCurso> {
   bool yaMatriculado = false;
-  bool solicitudPendiente = false; // Controla si tiene una solicitud en espera
+  bool solicitudPendiente = false; 
+  bool esCreador = false;
+  bool esModerador = false;
+  bool tieneAcceso = false;
   bool cargandoEstado = true;
+  String nombreCreador = "Cargando creador...";
 
   @override
   void initState() {
     super.initState();
-    _verificarAccesoYSolicitudes();
+    _cargarDatosYPermisos();
   }
 
-  // Consulta simultáneamente si está matriculado o tiene solicitudes enviadas
-  Future<void> _verificarAccesoYSolicitudes() async {
+  Future<void> _cargarDatosYPermisos() async {
     try {
       final String? uid = FirebaseAuth.instance.currentUser?.uid;
+      String cursoId = widget.curso['id'];
+      String creadorId = widget.curso['creadorId'] ?? '';
+
+      // 1. Obtener el nombre real del Creador del curso
+      if (creadorId.isNotEmpty) {
+        var creadorDoc = await FirebaseFirestore.instance.collection('usuarios').doc(creadorId).get();
+        if (mounted) {
+          setState(() {
+            if (creadorDoc.exists) {
+              nombreCreador = creadorDoc.data()?['nombre'] ?? 'Profesor sin nombre';
+            } else {
+              nombreCreador = 'Profesor (ID: $creadorId)'; // Respaldo si no existe en Firestore
+            }
+          });
+        }
+      }
+
       if (uid != null) {
-        String cursoId = widget.curso['id'];
-        
-        // 1. Revisar si está matriculado
-        final docMatricula = await FirebaseFirestore.instance
-            .collection('cursos')
-            .doc(cursoId)
-            .collection('matriculados')
-            .doc(uid)
-            .get();
-        
-        if (docMatricula.exists) {
-          if (mounted) {
-            setState(() {
-              yaMatriculado = true;
-              cargandoEstado = false;
-            });
+        // 2. Verificar si es el creador
+        if (uid == creadorId) {
+          esCreador = true;
+          tieneAcceso = true;
+        } else {
+          // 3. Verificar si el usuario actual es un Moderador Global
+          var miPerfilDoc = await FirebaseFirestore.instance.collection('usuarios').doc(uid).get();
+          if (miPerfilDoc.exists && miPerfilDoc.data()?['rol'] == 'moderador') {
+            esModerador = true;
+            tieneAcceso = true;
           }
-          return;
         }
 
-        // 2. Si no está matriculado, revisar si envió una solicitud privada
-        final docSolicitud = await FirebaseFirestore.instance
-            .collection('cursos')
-            .doc(cursoId)
-            .collection('solicitudes')
-            .doc(uid)
-            .get();
-
-        if (mounted) {
-          setState(() {
-            solicitudPendiente = docSolicitud.exists;
-            cargandoEstado = false;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('Error al verificar estados: $e');
-      if (mounted) {
-        setState(() {
-          cargandoEstado = false;
-        });
-      }
-    }
-  }
-
-  // Matrícula directa (Cursos Públicos)
-  Future<void> _matricularseDirecto() async {
-    try {
-      final String? uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid != null) {
-        String cursoId = widget.curso['id'];
-        
-        await FirebaseFirestore.instance
-            .collection('cursos')
-            .doc(cursoId)
-            .collection('matriculados')
-            .doc(uid)
-            .set({
-          'estudianteId': uid,
-          'fechaMatricula': FieldValue.serverTimestamp(),
-        });
-
-        if (mounted) {
-          setState(() {
+        // 4. Si no es creador ni moderador, revisar su matrícula o solicitud
+        if (!tieneAcceso) {
+          final docMatricula = await FirebaseFirestore.instance
+              .collection('cursos').doc(cursoId).collection('matriculados').doc(uid).get();
+          
+          if (docMatricula.exists) {
             yaMatriculado = true;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('¡Te has matriculado con éxito!'),
-              backgroundColor: Colors.green,
-            ),
-          );
+            tieneAcceso = true;
+          } else {
+            final docSolicitud = await FirebaseFirestore.instance
+                .collection('cursos').doc(cursoId).collection('solicitudes').doc(uid).get();
+            solicitudPendiente = docSolicitud.exists;
+          }
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al matricularse: $e'), backgroundColor: Colors.red),
-        );
-      }
+      debugPrint('Error al verificar permisos: $e');
+    } finally {
+      if (mounted) setState(() => cargandoEstado = false);
     }
   }
 
-  // Envío de Solicitud (Cursos Privados)
-  Future<void> _solicitarAcceso() async {
+  Future<void> _matricularseDirecto() async {
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
     try {
-      final String? uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid != null) {
-        String cursoId = widget.curso['id'];
-        
-        await FirebaseFirestore.instance
-            .collection('cursos')
-            .doc(cursoId)
-            .collection('solicitudes')
-            .doc(uid)
-            .set({
-          'estudianteId': uid,
-          'fechaSolicitud': FieldValue.serverTimestamp(),
-          'estado': 'pendiente',
-        });
-
-        if (mounted) {
-          setState(() {
-            solicitudPendiente = true;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Solicitud de acceso enviada al creador del curso.'),
-              backgroundColor: Colors.blue,
-            ),
-          );
-        }
+      await FirebaseFirestore.instance
+          .collection('cursos').doc(widget.curso['id']).collection('matriculados').doc(uid)
+          .set({'estudianteId': uid, 'fechaMatricula': FieldValue.serverTimestamp()});
+      if (mounted) {
+        setState(() { yaMatriculado = true; tieneAcceso = true; });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('¡Te has matriculado con éxito!'), backgroundColor: Colors.green));
       }
     } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _solicitarAcceso() async {
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('cursos').doc(widget.curso['id']).collection('solicitudes').doc(uid)
+          .set({'estudianteId': uid, 'fechaSolicitud': FieldValue.serverTimestamp(), 'estado': 'pendiente'});
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al enviar solicitud: $e'), backgroundColor: Colors.red),
-        );
+        setState(() => solicitudPendiente = true);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Solicitud enviada al profesor.'), backgroundColor: Colors.blue));
       }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }
   }
 
   Future<void> _seleccionarPDF() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-    );
-
+    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
     if (result != null && result.files.single.path != null) {
       String nombreArchivo = result.files.single.name;
-      String rutaArchivo = result.files.single.path!;
-      File archivoFisico = File(rutaArchivo);
-
+      File archivoFisico = File(result.files.single.path!);
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Subiendo $nombreArchivo... Espere un momento.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Subiendo $nombreArchivo...')));
 
       try {
         String cursoId = widget.curso['id'];
-        Reference ref = FirebaseStorage.instance
-            .ref()
-            .child('cursos/$cursoId/materiales/$nombreArchivo');
-        
+        Reference ref = FirebaseStorage.instance.ref().child('cursos/$cursoId/materiales/$nombreArchivo');
         UploadTask uploadTask = ref.putFile(archivoFisico);
         TaskSnapshot snapshot = await uploadTask;
-        
         String urlDescarga = await snapshot.ref.getDownloadURL();
 
-        await FirebaseFirestore.instance
-            .collection('cursos')
-            .doc(cursoId)
-            .collection('materiales')
-            .add({
+        await FirebaseFirestore.instance.collection('cursos').doc(cursoId).collection('materiales').add({
           'nombre': nombreArchivo,
           'url': urlDescarga,
           'fechaSubida': FieldValue.serverTimestamp(),
+          'subidoPor': FirebaseAuth.instance.currentUser?.uid,
         });
 
         if (!mounted) return;
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('¡Material subido y guardado con éxito!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Material subido con éxito'), backgroundColor: Colors.green));
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al subir el documento: $e'), backgroundColor: Colors.red),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al subir: $e'), backgroundColor: Colors.red));
       }
     }
   }
 
   Future<void> _eliminarPDF(String materialId, String urlArchivo, String nombreArchivo) async {
     try {
-      Reference storageRef = FirebaseStorage.instance.refFromURL(urlArchivo);
-      await storageRef.delete();
-
-      String cursoId = widget.curso['id'];
-      await FirebaseFirestore.instance
-          .collection('cursos')
-          .doc(cursoId)
-          .collection('materiales')
-          .doc(materialId)
-          .delete();
-
+      await FirebaseStorage.instance.refFromURL(urlArchivo).delete();
+      await FirebaseFirestore.instance.collection('cursos').doc(widget.curso['id']).collection('materiales').doc(materialId).delete();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('"$nombreArchivo" fue eliminado correctamente.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('"$nombreArchivo" eliminado.'), backgroundColor: Colors.orange));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al intentar eliminar: $e'), backgroundColor: Colors.red),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al eliminar: $e'), backgroundColor: Colors.red));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final String? usuarioActualId = FirebaseAuth.instance.currentUser?.uid;
-    final String creadorCursoId = widget.curso['creadorId'] ?? '';
-    final bool esCreador = usuarioActualId == creadorCursoId;
-
-    final bool tieneAcceso = esCreador || yaMatriculado;
     final bool esCursoPrivado = widget.curso['visibilidad'] == 'privado';
 
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.curso['titulo'] ?? 'Detalle del Curso'),
         actions: [
-          // Si el usuario es el creador del curso y este es privado, se muestra el ícono de revisión
-          if (esCreador && esCursoPrivado)
+          // Los moderadores o el creador pueden ver las solicitudes si el curso es privado
+          if ((esCreador || esModerador) && esCursoPrivado)
             IconButton(
               icon: const Icon(Icons.assignment_ind_outlined),
-              tooltip: 'Solicitudes Pendientes',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => PantallaSolicitudesCurso(curso: widget.curso),
-                  ),
-                );
-              },
+              tooltip: 'Ver Solicitudes',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => PantallaSolicitudesCurso(curso: widget.curso)),
+              ),
             ),
         ],
       ),
@@ -274,38 +189,25 @@ class _PantallaDetalleCursoState extends State<PantallaDetalleCurso> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Encabezado informativo
                   Row(
                     children: [
                       Chip(
-                        label: Text(
-                          widget.curso['visibilidad'].toString().toUpperCase(),
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                        ),
+                        label: Text(widget.curso['visibilidad'].toString().toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 12)),
                         backgroundColor: esCursoPrivado ? Colors.orange : Colors.green,
                       ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'ID: ${widget.curso['id']}',
-                        style: const TextStyle(color: Colors.grey),
-                      ),
+                      const Spacer(),
+                      if (esModerador) 
+                        const Chip(label: Text('Vista Moderador', style: TextStyle(color: Colors.white, fontSize: 11)), backgroundColor: Colors.blueGrey),
                     ],
                   ),
-                  const SizedBox(height: 15),
-                  
-                  // SECCIÓN DE LA DESCRIPCIÓN (Visible para todos)
-                  const Text(
-                    'Acerca de este curso:',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey),
-                  ),
+                  const SizedBox(height: 10),
+                  Text('Dictado por: $nombreCreador', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue)),
+                  const SizedBox(height: 10),
+                  const Text('Acerca de este curso:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
                   const SizedBox(height: 5),
-                  Text(
-                    widget.curso['descripcion'] ?? 'Sin descripción disponible.',
-                    style: const TextStyle(fontSize: 15, color: Colors.black87, height: 1.3),
-                  ),
+                  Text(widget.curso['descripcion'] ?? 'Sin descripción', style: const TextStyle(fontSize: 15, height: 1.3)),
                   const Divider(height: 30, thickness: 1),
 
-                  // CASO 1: NO TIENE ACCESO AL MATERIAL
                   if (!tieneAcceso) ...[
                     if (solicitudPendiente) ...[
                       const Expanded(
@@ -315,16 +217,9 @@ class _PantallaDetalleCursoState extends State<PantallaDetalleCurso> {
                             children: [
                               Icon(Icons.hourglass_top, size: 48, color: Colors.orange),
                               SizedBox(height: 12),
-                              Text(
-                                'Solicitud Pendiente',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange),
-                              ),
+                              Text('Solicitud Pendiente', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange)),
                               SizedBox(height: 6),
-                              Text(
-                                'El creador de la ayudantía debe aprobar tu acceso para que puedas ver y descargar los archivos.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.grey, fontSize: 14),
-                              ),
+                              Text('El profesor debe aprobar tu acceso para ver el material.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
                             ],
                           ),
                         ),
@@ -333,52 +228,31 @@ class _PantallaDetalleCursoState extends State<PantallaDetalleCurso> {
                       Expanded(
                         child: Center(
                           child: Text(
-                            esCursoPrivado
-                                ? 'Esta ayudantía es privada. Solicita acceso para poder revisar los archivos cargados.'
-                                : 'No estás inscrito en este módulo académico todavía.',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 15, color: Colors.grey),
-          ),
+                            esCursoPrivado ? 'Curso privado. Solicita acceso para ver el material.' : 'No estás matriculado en este curso.',
+                            textAlign: TextAlign.center, style: const TextStyle(fontSize: 15, color: Colors.grey),
+                          ),
                         ),
                       ),
                       SizedBox(
-                        width: double.infinity,
-                        height: 50,
+                        width: double.infinity, height: 50,
                         child: ElevatedButton.icon(
-                          // Decide si matricula directo o crea flujo de solicitud
                           onPressed: esCursoPrivado ? _solicitarAcceso : _matricularseDirecto,
                           icon: Icon(esCursoPrivado ? Icons.lock_open : Icons.group_add),
-                          label: Text(esCursoPrivado ? 'Solicitar Acceso al Curso' : 'Matricularse en el Curso'),
+                          label: Text(esCursoPrivado ? 'Solicitar Acceso' : 'Matricularse'),
                         ),
                       ),
                     ],
                   ],
 
-                  // CASO 2: TIENE ACCESO (Creador o Alumno Aprobado)
                   if (tieneAcceso) ...[
-                    const Text(
-                      'Material de Estudio (PDFs)',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
+                    const Text('Material de Estudio', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
                     Expanded(
                       child: StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('cursos')
-                            .doc(widget.curso['id'])
-                            .collection('materiales')
-                            .orderBy('fechaSubida', descending: true)
-                            .snapshots(),
+                        stream: FirebaseFirestore.instance.collection('cursos').doc(widget.curso['id']).collection('materiales').orderBy('fechaSubida', descending: true).snapshots(),
                         builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const Center(child: CircularProgressIndicator());
-                          }
-                          if (snapshot.hasError) {
-                            return Center(child: Text('Error al cargar el material: ${snapshot.error}'));
-                          }
-                          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                            return const Center(child: Text('Aún no hay material de apoyo para esta ayudantía.'));
-                          }
+                          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text('No hay material subido aún.', style: TextStyle(color: Colors.grey)));
 
                           final materiales = snapshot.data!.docs;
 
@@ -387,39 +261,27 @@ class _PantallaDetalleCursoState extends State<PantallaDetalleCurso> {
                             itemBuilder: (context, index) {
                               var doc = materiales[index];
                               var material = doc.data() as Map<String, dynamic>;
-                              
                               String materialId = doc.id;
-                              String nombreArchivo = material['nombre'] ?? 'Archivo sin nombre';
+                              String nombreArchivo = material['nombre'] ?? 'Archivo';
                               String url = material['url'] ?? '';
 
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 8),
                                 child: ListTile(
-                                  leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-                                  title: Text(nombreArchivo),
+                                  leading: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 30),
+                                  title: Text(nombreArchivo, style: const TextStyle(fontWeight: FontWeight.w500)),
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       IconButton(
                                         icon: const Icon(Icons.download, color: Colors.blue),
-                                        onPressed: () async {
-                                          final Uri fileUrl = Uri.parse(url);
-                                          try {
-                                            await launchUrl(fileUrl, mode: LaunchMode.externalApplication);
-                                          } catch (e) {
-                                            if (!context.mounted) return;
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(content: Text('Error al abrir el navegador.')),
-                                            );
-                                          }
-                                        },
+                                        onPressed: () async => await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
                                       ),
-                                      if (esCreador)
+                                      // El creador o el moderador pueden eliminar material
+                                      if (esCreador || esModerador)
                                         IconButton(
                                           icon: const Icon(Icons.delete, color: Colors.red),
-                                          onPressed: () {
-                                            _eliminarPDF(materialId, url, nombreArchivo);
-                                          },
+                                          onPressed: () => _eliminarPDF(materialId, url, nombreArchivo),
                                         ),
                                     ],
                                   ),
@@ -430,20 +292,13 @@ class _PantallaDetalleCursoState extends State<PantallaDetalleCurso> {
                         },
                       ),
                     ),
-                    
-                    if (esCreador) ...[
-                      const SizedBox(height: 20),
+                    if (esCreador || esModerador) ...[
+                      const SizedBox(height: 15),
                       SizedBox(
-                        width: double.infinity,
-                        height: 50,
+                        width: double.infinity, height: 50,
                         child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue.shade50,
-                            foregroundColor: Colors.blue.shade800,
-                          ),
-                          onPressed: _seleccionarPDF,
-                          icon: const Icon(Icons.upload_file),
-                          label: const Text('Subir Archivo PDF'),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade50, foregroundColor: Colors.blue.shade800),
+                          onPressed: _seleccionarPDF, icon: const Icon(Icons.upload_file), label: const Text('Subir Archivo PDF'),
                         ),
                       ),
                     ],

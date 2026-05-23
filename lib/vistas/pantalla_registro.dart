@@ -11,6 +11,7 @@ class PantallaRegistro extends StatefulWidget {
 }
 
 class _PantallaRegistroState extends State<PantallaRegistro> {
+  final TextEditingController _nombreController = TextEditingController(); // NUEVO CAMPO
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
   final TextEditingController _confirmPassController = TextEditingController();
@@ -31,7 +32,8 @@ class _PantallaRegistroState extends State<PantallaRegistro> {
   }
 
   void _registrar() async {
-    if (_emailController.text.trim().isEmpty || _passController.text.trim().isEmpty || _confirmPassController.text.trim().isEmpty) {
+    // Validamos que el nombre también esté lleno
+    if (_nombreController.text.trim().isEmpty || _emailController.text.trim().isEmpty || _passController.text.trim().isEmpty || _confirmPassController.text.trim().isEmpty) {
       setState(() => _mensajeError = 'Todos los campos son obligatorios.');
       return;
     }
@@ -40,7 +42,7 @@ class _PantallaRegistroState extends State<PantallaRegistro> {
       return;
     }
     if (!_esContrasenaSegura(_passController.text)) {
-      setState(() => _mensajeError = 'La contraseña debe ser más segura (8+ caracteres, Mayús, Núm, Símbolo).');
+      setState(() => _mensajeError = 'La contraseña debe tener 8+ caracteres, Mayús, Núm y Símbolo.');
       return;
     }
     if (_passController.text != _confirmPassController.text) {
@@ -53,14 +55,20 @@ class _PantallaRegistroState extends State<PantallaRegistro> {
         password: _passController.text,
       );
       
+      // Guardamos el nombre ingresado directamente en el perfil de Authentication
+      await userCredential.user?.updateDisplayName(_nombreController.text.trim());
+
+      // Guardamos el perfil completo en Firestore
       await FirebaseFirestore.instance.collection('usuarios').doc(userCredential.user!.uid).set({
+        'nombre': _nombreController.text.trim(), // Guardamos el nombre
         'correo': _emailController.text.trim(),
         'rol': 'estudiante',
         'fechaCreacion': FieldValue.serverTimestamp(),
       });
+
       await userCredential.user?.sendEmailVerification();
-      
       await FirebaseAuth.instance.signOut();
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Registro exitoso. Revisa tu correo para verificar y luego inicia sesión.')),
@@ -77,18 +85,34 @@ class _PantallaRegistroState extends State<PantallaRegistro> {
       final google_auth.GoogleSignIn googleSignIn = google_auth.GoogleSignIn();
       final google_auth.GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) return;
+
       final google_auth.GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       final AuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      User? user = userCredential.user;
+
+      if (user != null) {
+        // Verificar si es la primera vez que entra con Google
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).get();
+        if (!userDoc.exists) {
+          // Si no existe en Firestore, lo creamos sacando su nombre de Google
+          await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).set({
+            'nombre': user.displayName ?? 'Estudiante UA',
+            'correo': user.email ?? '',
+            'rol': 'estudiante',
+            'fechaCreacion': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+
       if (mounted && Navigator.canPop(context)) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al registrar con Google: $e'))
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error con Google: $e')));
       }
     }
   }
@@ -110,6 +134,13 @@ class _PantallaRegistroState extends State<PantallaRegistro> {
               children: [
                 const Icon(Icons.school, size: 100, color: Colors.blue),
                 const SizedBox(height: 20),
+                // NUEVO TEXTFIELD PARA EL NOMBRE
+                TextField(
+                  controller: _nombreController,
+                  decoration: const InputDecoration(labelText: 'Nombre Completo', border: OutlineInputBorder()),
+                  textCapitalization: TextCapitalization.words,
+                ),
+                const SizedBox(height: 15),
                 TextField(
                   controller: _emailController,
                   decoration: const InputDecoration(labelText: 'Correo Institucional', border: OutlineInputBorder()),
@@ -136,11 +167,7 @@ class _PantallaRegistroState extends State<PantallaRegistro> {
                 ),
                 const SizedBox(height: 15),
                 ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white, 
-                    foregroundColor: Colors.black, 
-                    minimumSize: const Size(double.infinity, 50)
-                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, minimumSize: const Size(double.infinity, 50)),
                   icon: const Icon(Icons.g_mobiledata, size: 30, color: Colors.blue),
                   label: const Text('Registrarse con Google'),
                   onPressed: _ingresarConGoogle,

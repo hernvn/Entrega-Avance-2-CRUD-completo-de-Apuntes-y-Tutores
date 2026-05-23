@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart' as google_auth;
 import 'pantalla_registro.dart';
 import 'pantalla_recuperar.dart';
@@ -64,12 +65,30 @@ class _PantallaLoginState extends State<PantallaLogin> {
       final google_auth.GoogleSignIn googleSignIn = google_auth.GoogleSignIn();
       final google_auth.GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) return; 
+
       final google_auth.GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       final AuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      User? user = userCredential.user;
+
+      if (user != null) {
+        // Verificar si es la primera vez que entra con Google
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).get();
+        if (!userDoc.exists) {
+          // Si no existe, creamos su perfil copiando sus datos de Google
+          await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).set({
+            'nombre': user.displayName ?? 'Estudiante UA',
+            'correo': user.email ?? '',
+            'rol': 'estudiante',
+            'fechaCreacion': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e) {
       if (mounted) {
