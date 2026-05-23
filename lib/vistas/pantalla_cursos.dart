@@ -13,6 +13,7 @@ class PantallaCursos extends StatefulWidget {
 
 class _PantallaCursosState extends State<PantallaCursos> {
   late Stream<QuerySnapshot> _cursosStream;
+  String _textoBusqueda = "";
 
   @override
   void initState() {
@@ -25,7 +26,7 @@ class _PantallaCursosState extends State<PantallaCursos> {
 
   Future<void> _mostrarDialogoNuevoCurso(BuildContext context) async {
     final TextEditingController tituloController = TextEditingController();
-    final TextEditingController descripcionController = TextEditingController(); // Nuevo controlador
+    final TextEditingController descripcionController = TextEditingController(); 
     String visibilidadSeleccionada = 'publico';
     bool guardando = false;
 
@@ -48,7 +49,6 @@ class _PantallaCursosState extends State<PantallaCursos> {
                       ),
                     ),
                     const SizedBox(height: 15),
-                    // Nuevo campo de texto para la descripción
                     TextField(
                       controller: descripcionController,
                       maxLines: 3,
@@ -103,7 +103,7 @@ class _PantallaCursosState extends State<PantallaCursos> {
                               await docRef.set({
                                 'id': docRef.id,
                                 'titulo': tituloController.text.trim(),
-                                'descripcion': descripcionController.text.trim(), // Se guarda en la nube
+                                'descripcion': descripcionController.text.trim(),
                                 'visibilidad': visibilidadSeleccionada,
                                 'creadorId': uid,
                                 'fechaCreacion': FieldValue.serverTimestamp(),
@@ -165,7 +165,6 @@ class _PantallaCursosState extends State<PantallaCursos> {
     ) ?? false;
 
     if (!confirmar) return;
-
     if (!mounted) return;
 
     showDialog(
@@ -229,106 +228,157 @@ class _PantallaCursosState extends State<PantallaCursos> {
       appBar: AppBar(
         title: const Text('Mis Ayudantías'),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _cursosStream,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error al cargar los cursos: ${snapshot.error}'));
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text('Aún no hay cursos disponibles. Crea el primero.'));
-          }
+      body: Column(
+        children: [
+          // BARRA DE BÚSQUEDA
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              onChanged: (valor) {
+                setState(() {
+                  _textoBusqueda = valor.toLowerCase();
+                });
+              },
+              decoration: InputDecoration(
+                hintText: 'Buscar curso por título o descripción...',
+                prefixIcon: const Icon(Icons.search, color: Colors.blue),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30),
+                  borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30),
+                  borderSide: const BorderSide(color: Colors.blue, width: 2),
+                ),
+              ),
+            ),
+          ),
+          
+          // LISTA DE CURSOS
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _cursosStream,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error al cargar los cursos: ${snapshot.error}'));
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text('Aún no hay cursos disponibles. Crea el primero.'));
+                }
 
-          final cursos = snapshot.data!.docs;
+                // LÓGICA DE FILTRADO LOCAL
+                final cursosFiltrados = snapshot.data!.docs.where((doc) {
+                  var data = doc.data() as Map<String, dynamic>;
+                  String titulo = (data['titulo'] ?? '').toString().toLowerCase();
+                  String descripcion = (data['descripcion'] ?? '').toString().toLowerCase();
+                  
+                  if (_textoBusqueda.isEmpty) return true;
+                  return titulo.contains(_textoBusqueda) || descripcion.contains(_textoBusqueda);
+                }).toList();
 
-          return ListView.builder(
-            itemCount: cursos.length,
-            padding: const EdgeInsets.all(10),
-            itemBuilder: (context, index) {
-              var doc = cursos[index];
-              var cursoData = doc.data() as Map<String, dynamic>;
-              
-              cursoData['id'] = doc.id; 
+                if (cursosFiltrados.isEmpty) {
+                  return const Center(
+                    child: Text('No se encontraron cursos.', style: TextStyle(color: Colors.grey)),
+                  );
+                }
 
-              final String? usuarioActualId = FirebaseAuth.instance.currentUser?.uid;
-              String titulo = cursoData['titulo'] ?? 'Curso sin título';
-              String descripcion = cursoData['descripcion'] ?? 'Sin descripción disponible.';
-              String visibilidad = cursoData['visibilidad'] ?? 'publico';
+                return ListView.builder(
+                  itemCount: cursosFiltrados.length,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemBuilder: (context, index) {
+                    var doc = cursosFiltrados[index];
+                    var cursoData = doc.data() as Map<String, dynamic>;
+                    
+                    cursoData['id'] = doc.id; 
 
-              final bool esPrivado = visibilidad == 'privado';
+                    final String? usuarioActualId = FirebaseAuth.instance.currentUser?.uid;
+                    String titulo = cursoData['titulo'] ?? 'Curso sin título';
+                    String descripcion = cursoData['descripcion'] ?? 'Sin descripción disponible.';
+                    String visibilidad = cursoData['visibilidad'] ?? 'publico';
 
-              return Card(
-                elevation: 2,
-                margin: const EdgeInsets.only(bottom: 12),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  leading: CircleAvatar(
-                    backgroundColor: esPrivado ? Colors.orange.shade100 : Colors.blue.shade100,
-                    child: Icon(
-                      esPrivado ? Icons.lock : Icons.book, 
-                      color: esPrivado ? Colors.orange.shade800 : Colors.blue.shade800
-                    ),
-                  ),
-                  title: Text(
-                    titulo,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  // Muestra la descripción abreviada y la etiqueta de visibilidad
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 4),
-                      Text(
-                        descripcion,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: esPrivado ? Colors.orange.shade50 : Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          visibilidad.toUpperCase(),
-                          style: TextStyle(
-                            color: esPrivado ? Colors.orange.shade800 : Colors.green.shade800,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
+                    final bool esPrivado = visibilidad == 'privado';
+
+                    return Card(
+                      elevation: 2,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        leading: CircleAvatar(
+                          backgroundColor: esPrivado ? Colors.orange.shade100 : Colors.blue.shade100,
+                          child: Icon(
+                            esPrivado ? Icons.lock : Icons.book, 
+                            color: esPrivado ? Colors.orange.shade800 : Colors.blue.shade800
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (cursoData['creadorId'] == usuarioActualId)
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
-                          onPressed: () => _eliminarCursoCompleto(doc.id),
+                        title: Text(
+                          titulo,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                         ),
-                      const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                    ],
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => PantallaDetalleCurso(curso: cursoData),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 4),
+                            Text(
+                              descripcion,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: esPrivado ? Colors.orange.shade50 : Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                visibilidad.toUpperCase(),
+                                style: TextStyle(
+                                  color: esPrivado ? Colors.orange.shade800 : Colors.green.shade800,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (cursoData['creadorId'] == usuarioActualId)
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                onPressed: () => _eliminarCursoCompleto(doc.id),
+                              ),
+                            const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                          ],
+                        ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => PantallaDetalleCurso(curso: cursoData),
+                            ),
+                          );
+                        },
                       ),
                     );
                   },
-                ),
-              );
-            },
-          );
-        },
+                );
+              },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _mostrarDialogoNuevoCurso(context),

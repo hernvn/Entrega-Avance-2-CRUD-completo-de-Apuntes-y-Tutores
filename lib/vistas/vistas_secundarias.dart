@@ -231,8 +231,15 @@ class _VistaApuntesState extends State<VistaApuntes> {
   }
 }
 
-class VistaTutores extends StatelessWidget {
+class VistaTutores extends StatefulWidget {
   const VistaTutores({super.key});
+
+  @override
+  State<VistaTutores> createState() => _VistaTutoresState();
+}
+
+class _VistaTutoresState extends State<VistaTutores> {
+  String _textoBusqueda = "";
 
   void _mostrarFormularioTutor(BuildContext context) {
     TextEditingController especialidadController = TextEditingController();
@@ -324,47 +331,102 @@ class VistaTutores extends StatelessWidget {
     final String uidActual = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return Scaffold(
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('tutores').orderBy('fecha', descending: true).snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator()); 
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text('No hay tutores disponibles aún.'));
-          }
-
-          final tutores = snapshot.data!.docs;
-
-          return ListView.builder(
+      body: Column(
+        children: [
+          // BARRA DE BÚSQUEDA
+          Padding(
             padding: const EdgeInsets.all(16.0),
-            itemCount: tutores.length,
-            itemBuilder: (context, index) {
-              var tutor = tutores[index].data() as Map<String, dynamic>;
-              String docId = tutores[index].id;
-
-              return Card(
-                elevation: 3,
-                margin: const EdgeInsets.only(bottom: 15),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.blue,
-                    child: Text(tutor['nombre'][0].toUpperCase(), style: const TextStyle(color: Colors.white)),
-                  ),
-                  title: Text(tutor['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('${tutor['especialidad']}\n${tutor['descripcion']}'),
-                  isThreeLine: true,
-                  trailing: uidActual == tutor['uid']
-                      ? IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _confirmarEliminacionTutor(context, docId), 
-                        )
-                      : const Icon(Icons.chat_bubble_outline, color: Colors.blue),
+            child: TextField(
+              onChanged: (valor) {
+                setState(() {
+                  _textoBusqueda = valor.toLowerCase();
+                });
+              },
+              decoration: InputDecoration(
+                hintText: 'Buscar por nombre, materia o detalle...',
+                prefixIcon: const Icon(Icons.search, color: Colors.blue),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30),
+                  borderSide: BorderSide.none,
                 ),
-              );
-            },
-          );
-        },
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30),
+                  borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30),
+                  borderSide: const BorderSide(color: Colors.blue, width: 2),
+                ),
+              ),
+            ),
+          ),
+
+          // LISTA DE TUTORES
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('tutores').orderBy('fecha', descending: true).snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator()); 
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text('No hay tutores disponibles aún.'));
+                }
+
+                // LÓGICA DE FILTRADO LOCAL
+                final tutoresFiltrados = snapshot.data!.docs.where((doc) {
+                  var data = doc.data() as Map<String, dynamic>;
+                  String nombre = (data['nombre'] ?? '').toString().toLowerCase();
+                  String especialidad = (data['especialidad'] ?? '').toString().toLowerCase();
+                  String descripcion = (data['descripcion'] ?? '').toString().toLowerCase();
+                  
+                  if (_textoBusqueda.isEmpty) return true;
+                  return nombre.contains(_textoBusqueda) || 
+                         especialidad.contains(_textoBusqueda) || 
+                         descripcion.contains(_textoBusqueda);
+                }).toList();
+
+                if (tutoresFiltrados.isEmpty) {
+                  return const Center(
+                    child: Text('No se encontraron tutores.', style: TextStyle(color: Colors.grey)),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  itemCount: tutoresFiltrados.length,
+                  itemBuilder: (context, index) {
+                    var tutor = tutoresFiltrados[index].data() as Map<String, dynamic>;
+                    String docId = tutoresFiltrados[index].id;
+
+                    return Card(
+                      elevation: 3,
+                      margin: const EdgeInsets.only(bottom: 15),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.blue,
+                          child: Text(tutor['nombre'][0].toUpperCase(), style: const TextStyle(color: Colors.white)),
+                        ),
+                        title: Text(tutor['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('${tutor['especialidad']}\n${tutor['descripcion']}'),
+                        isThreeLine: true,
+                        trailing: uidActual == tutor['uid']
+                            ? IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => _confirmarEliminacionTutor(context, docId), 
+                              )
+                            : const Icon(Icons.chat_bubble_outline, color: Colors.blue),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _mostrarFormularioTutor(context),
