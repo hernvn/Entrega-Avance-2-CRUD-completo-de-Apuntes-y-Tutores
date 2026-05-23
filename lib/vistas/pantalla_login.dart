@@ -76,14 +76,13 @@ class _PantallaLoginState extends State<PantallaLogin> {
       User? user = userCredential.user;
 
       if (user != null) {
-        // Verificar si es la primera vez que entra con Google
         DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).get();
         if (!userDoc.exists) {
-          // Si no existe, creamos su perfil copiando sus datos de Google
           await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).set({
             'nombre': user.displayName ?? 'Estudiante UA',
             'correo': user.email ?? '',
             'rol': 'estudiante',
+            'estado': 'activo', // Se asegura el campo de estado al loguearse por primera vez con Google
             'fechaCreacion': FieldValue.serverTimestamp(),
           });
         }
