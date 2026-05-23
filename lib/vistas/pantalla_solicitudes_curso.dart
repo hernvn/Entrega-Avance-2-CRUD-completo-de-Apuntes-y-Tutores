@@ -117,43 +117,56 @@ class _PantallaSolicitudesCursoState extends State<PantallaSolicitudesCurso> {
             padding: const EdgeInsets.all(12),
             itemBuilder: (context, index) {
               var doc = solicitudes[index];
-              String estudianteId = doc.id; // Su ID de autenticación único
+              String estudianteId = doc.id; // El UID de Firebase Auth
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 10),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.blue.shade50,
-                    child: const Icon(Icons.person, color: Colors.blue),
-                  ),
-                  title: Text(
-                    'ID del Solicitante:',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                  ),
-                  subtitle: Text(
-                    estudianteId,
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Botón para Rechazar
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red),
-                        tooltip: 'Rechazar Acceso',
-                        onPressed: () => _rechazarAlumno(estudianteId),
+              // Usamos FutureBuilder para transformar el ID en un Nombre Real
+              return FutureBuilder<DocumentSnapshot>(
+                future: FirebaseFirestore.instance.collection('usuarios').doc(estudianteId).get(),
+                builder: (context, userSnapshot) {
+                  String nombreMostrar = 'Cargando nombre...';
+                  String correoMostrar = 'Cargando correo...';
+
+                  if (userSnapshot.hasData && userSnapshot.data!.exists) {
+                    var datosUsuario = userSnapshot.data!.data() as Map<String, dynamic>;
+                    nombreMostrar = datosUsuario['nombre'] ?? 'Usuario sin nombre';
+                    correoMostrar = datosUsuario['correo'] ?? '';
+                  }
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.blue.shade50,
+                        child: const Icon(Icons.person, color: Colors.blue),
                       ),
-                      const SizedBox(width: 5),
-                      // Botón para Aprobar
-                      IconButton(
-                        icon: const Icon(Icons.check, color: Colors.green),
-                        tooltip: 'Aprobar Acceso',
-                        onPressed: () => _aprobarAlumno(estudianteId),
+                      title: Text(
+                        nombreMostrar,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
-                    ],
-                  ),
-                ),
+                      subtitle: Text(
+                        correoMostrar.isNotEmpty ? correoMostrar : 'ID: $estudianteId',
+                        style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.red),
+                            tooltip: 'Rechazar Acceso',
+                            onPressed: () => _rechazarAlumno(estudianteId),
+                          ),
+                          const SizedBox(width: 5),
+                          IconButton(
+                            icon: const Icon(Icons.check, color: Colors.green),
+                            tooltip: 'Aprobar Acceso',
+                            onPressed: () => _aprobarAlumno(estudianteId),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               );
             },
           );
