@@ -88,6 +88,82 @@ class _VistaApuntesState extends State<VistaApuntes> {
     );
   }
 
+  void _mostrarDialogoReporte(BuildContext context, String apunteId, String nombreArchivo) {
+    TextEditingController motivoController = TextEditingController();
+    bool enviando = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: const Text('Reportar Material', style: TextStyle(color: Colors.orange)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('¿Por qué consideras que este material debe ser revisado por un moderador?', style: TextStyle(fontSize: 13)),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: motivoController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    hintText: 'Ej: Contenido inapropiado, no corresponde a la materia, archivo dañado...',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: enviando ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                onPressed: enviando ? null : () async {
+                  if (motivoController.text.trim().isEmpty) return;
+                  
+                  setStateDialog(() => enviando = true);
+                  
+                  try {
+                    final String uidActual = FirebaseAuth.instance.currentUser?.uid ?? 'desconocido';
+                    
+                    // Guardamos el reporte en una nueva colección para los moderadores
+                    await FirebaseFirestore.instance.collection('reportes').add({
+                      'apunteId': apunteId,
+                      'nombreArchivo': nombreArchivo,
+                      'motivo': motivoController.text.trim(),
+                      'reportadoPor': uidActual,
+                      'fechaReporte': FieldValue.serverTimestamp(),
+                      'estado': 'pendiente', // Para que el moderador sepa si ya lo revisó
+                    });
+
+                    if (context.mounted) {
+                      Navigator.pop(dialogContext);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Reporte enviado a los moderadores. ¡Gracias!'), backgroundColor: Colors.green),
+                      );
+                    }
+                  } catch (e) {
+                    setStateDialog(() => enviando = false);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error al reportar: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                },
+                child: enviando 
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text('Enviar Reporte'),
+              ),
+            ],
+          );
+        }
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final String uidActual = FirebaseAuth.instance.currentUser?.uid ?? '';
@@ -192,6 +268,7 @@ class _VistaApuntesState extends State<VistaApuntes> {
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              // Botón de descargar
                               IconButton(
                                 icon: const Icon(Icons.download_rounded, color: Colors.blue),
                                 tooltip: 'Descargar',
@@ -203,17 +280,29 @@ class _VistaApuntesState extends State<VistaApuntes> {
                                   }
                                 },
                               ),
+                              
+                              // Si es el autor, puede editar
                               if (esAutor)
                                 IconButton(
                                   icon: const Icon(Icons.edit, color: Colors.orange),
                                   tooltip: 'Editar',
                                   onPressed: () => _mostrarDialogoEdicion(context, apunteId, apunte['nombre_archivo'], apunte['materia']),
                                 ),
+                                
+                              // Si es autor o moderador, puede eliminar
                               if (esAutor || esModerador)
                                 IconButton(
                                   icon: const Icon(Icons.delete, color: Colors.red),
                                   tooltip: esModerador && !esAutor ? 'Eliminar (Como Moderador)' : 'Eliminar',
                                   onPressed: () => _confirmarEliminacion(context, apunteId, urlDescarga),
+                                ),
+                                
+                              // NUEVO: Si NO es el autor, le sale la bandera para reportar
+                              if (!esAutor)
+                                IconButton(
+                                  icon: const Icon(Icons.flag_outlined, color: Colors.orange),
+                                  tooltip: 'Reportar material',
+                                  onPressed: () => _mostrarDialogoReporte(context, apunteId, apunte['nombre_archivo']),
                                 ),
                             ],
                           ),
