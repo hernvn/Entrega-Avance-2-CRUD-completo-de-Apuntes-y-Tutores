@@ -232,13 +232,18 @@ class _VistaApuntesState extends State<VistaApuntes> {
                     );
                   }
 
-                  // LÓGICA DE FILTRADO LOCAL
+                  
+                  // LÓGICA DE FILTRADO LOCAL Y SOFT DELETE
                   final apuntesFiltrados = snapshot.data!.docs.where((doc) {
                     var data = doc.data() as Map<String, dynamic>;
+                    
+                    // 1. Si el archivo fue marcado como oculto por un moderador, no se muestra a nadie
+                    if (data['visible'] == false) return false;
+
+                    // 2. Lógica del buscador
                     String nombreArchivo = (data['nombre_archivo'] ?? '').toString().toLowerCase();
                     String materia = (data['materia'] ?? '').toString().toLowerCase();
                     
-                    // Si la búsqueda está vacía, muestra todos. Si no, verifica si coincide.
                     if (_textoBusqueda.isEmpty) return true;
                     return nombreArchivo.contains(_textoBusqueda) || materia.contains(_textoBusqueda);
                   }).toList();

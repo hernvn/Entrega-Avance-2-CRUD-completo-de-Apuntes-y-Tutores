@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pie_chart/pie_chart.dart';
+import 'pantalla_reportes.dart';
 
 class PantallaDashboard extends StatefulWidget {
   const PantallaDashboard({super.key});
@@ -100,6 +101,30 @@ class _PantallaDashboardState extends State<PantallaDashboard> {
                     ),
                   ),
 
+                  const SizedBox(height: 25),
+                  
+                  // BOTÓN DE ACCESO A REPORTES
+                  SizedBox(
+                    width: double.infinity,
+                    height: 55,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade50,
+                        foregroundColor: Colors.red.shade800,
+                        elevation: 0,
+                        side: BorderSide(color: Colors.red.shade200, width: 1),
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const PantallaReportes()),
+                        );
+                      },
+                      icon: const Icon(Icons.admin_panel_settings),
+                      label: const Text('Revisar Bandeja de Reportes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  
                   const SizedBox(height: 30),
                   const Text('Actividad Reciente (Materiales)', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 15),
