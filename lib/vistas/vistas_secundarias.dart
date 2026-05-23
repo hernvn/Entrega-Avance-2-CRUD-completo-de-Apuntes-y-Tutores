@@ -1,16 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
-class VistaApuntes extends StatelessWidget {
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:url_launcher/url_launcher.dart';
+class VistaApuntes extends StatefulWidget {
   const VistaApuntes({super.key});
 
-  void _confirmarEliminacion(BuildContext context, String id) {
+  @override
+  State<VistaApuntes> createState() => _VistaApuntesState();
+}
+
+class _VistaApuntesState extends State<VistaApuntes> {
+  String _textoBusqueda = "";
+
+  void _confirmarEliminacion(BuildContext context, String id, String? url) {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('¿Eliminar apunte?'),
-        content: const Text('Esta acción no se puede deshacer.'),
+        title: const Text('¿Eliminar apunte?', style: TextStyle(color: Colors.red)),
+        content: const Text('Esta acción eliminará el archivo de la base de datos para todos los usuarios. No se puede deshacer.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
@@ -19,12 +29,24 @@ class VistaApuntes extends StatelessWidget {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () async {
-              await FirebaseFirestore.instance.collection('apuntes').doc(id).delete();
-              if (context.mounted) {
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Apunte eliminado'), backgroundColor: Colors.orange),
-                );
+              try {
+                if (url != null && url.isNotEmpty) {
+                  await FirebaseStorage.instance.refFromURL(url).delete();
+                }
+                await FirebaseFirestore.instance.collection('apuntes').doc(id).delete();
+                
+                if (context.mounted) {
+                  Navigator.pop(dialogContext);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Apunte eliminado del sistema'), backgroundColor: Colors.orange),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error al eliminar: $e'), backgroundColor: Colors.red),
+                  );
+                }
               }
             },
             child: const Text('Eliminar'),
@@ -70,68 +92,141 @@ class VistaApuntes extends StatelessWidget {
   Widget build(BuildContext context) {
     final String uidActual = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('apuntes')
-          .orderBy('fecha_subida', descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(
-            child: Text('Aún no hay material subido.',
-                style: TextStyle(color: Colors.grey)),
-          );
-        }
-
-        final apuntes = snapshot.data!.docs;
-
-        return ListView.builder(
+    return Column(
+      children: [
+        // BARRA DE BÚSQUEDA
+        Padding(
           padding: const EdgeInsets.all(16.0),
-          itemCount: apuntes.length,
-          itemBuilder: (context, index) {
-            var apunte = apuntes[index].data() as Map<String, dynamic>;
-            String apunteId = apuntes[index].id;
-
-            return Card(
-              elevation: 2,
-              margin: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
-                leading: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 40),
-                title: Text(apunte['nombre_archivo'] ?? 'Sin título',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text('${apunte['materia']} • Por: ${apunte['autor_nombre']}'),
-                
-                trailing: (uidActual == apunte['autor_id'])
-                    ? Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.blue),
-                            onPressed: () => _mostrarDialogoEdicion(
-                                context, 
-                                apunteId, 
-                                apunte['nombre_archivo'], 
-                                apunte['materia']
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _confirmarEliminacion(context, apunteId),
-                          ),
-                        ],
-                      )
-                    : const Icon(Icons.download_rounded, color: Colors.grey),
+          child: TextField(
+            onChanged: (valor) {
+              setState(() {
+                _textoBusqueda = valor.toLowerCase();
+              });
+            },
+            decoration: InputDecoration(
+              hintText: 'Buscar por materia o nombre...',
+              prefixIcon: const Icon(Icons.search, color: Colors.blue),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(vertical: 0),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(30),
+                borderSide: BorderSide.none,
               ),
-            );
-          },
-        );
-      },
+              // Sombra sutil para la barra
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(30),
+                borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(30),
+                borderSide: const BorderSide(color: Colors.blue, width: 2),
+              ),
+            ),
+          ),
+        ),
+
+        // LISTA DE APUNTES
+        Expanded(
+          child: FutureBuilder<DocumentSnapshot>(
+            future: FirebaseFirestore.instance.collection('usuarios').doc(uidActual).get(),
+            builder: (context, userSnapshot) {
+              bool esModerador = false;
+              
+              if (userSnapshot.hasData && userSnapshot.data!.exists) {
+                var datosUsuario = userSnapshot.data!.data() as Map<String, dynamic>;
+                esModerador = datosUsuario['rol'] == 'moderador';
+              }
+
+              return StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('apuntes')
+                    .orderBy('fecha_subida', descending: true)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error: ${snapshot.error}'));
+                  }
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return const Center(
+                      child: Text('Aún no hay material subido.', style: TextStyle(color: Colors.grey)),
+                    );
+                  }
+
+                  // LÓGICA DE FILTRADO LOCAL
+                  final apuntesFiltrados = snapshot.data!.docs.where((doc) {
+                    var data = doc.data() as Map<String, dynamic>;
+                    String nombreArchivo = (data['nombre_archivo'] ?? '').toString().toLowerCase();
+                    String materia = (data['materia'] ?? '').toString().toLowerCase();
+                    
+                    // Si la búsqueda está vacía, muestra todos. Si no, verifica si coincide.
+                    if (_textoBusqueda.isEmpty) return true;
+                    return nombreArchivo.contains(_textoBusqueda) || materia.contains(_textoBusqueda);
+                  }).toList();
+
+                  if (apuntesFiltrados.isEmpty) {
+                    return const Center(
+                      child: Text('No se encontraron resultados.', style: TextStyle(color: Colors.grey)),
+                    );
+                  }
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    itemCount: apuntesFiltrados.length,
+                    itemBuilder: (context, index) {
+                      var apunte = apuntesFiltrados[index].data() as Map<String, dynamic>;
+                      String apunteId = apuntesFiltrados[index].id;
+                      String urlDescarga = apunte['url'] ?? '';
+                      bool esAutor = uidActual == apunte['autor_id'];
+
+                      return Card(
+                        elevation: 2,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          leading: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 40),
+                          title: Text(apunte['nombre_archivo'] ?? 'Sin título', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('${apunte['materia']} • Por: ${apunte['autor_nombre']}'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.download_rounded, color: Colors.blue),
+                                tooltip: 'Descargar',
+                                onPressed: () async {
+                                  if (urlDescarga.isNotEmpty) {
+                                    await launchUrl(Uri.parse(urlDescarga), mode: LaunchMode.externalApplication);
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Archivo no disponible')));
+                                  }
+                                },
+                              ),
+                              if (esAutor)
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.orange),
+                                  tooltip: 'Editar',
+                                  onPressed: () => _mostrarDialogoEdicion(context, apunteId, apunte['nombre_archivo'], apunte['materia']),
+                                ),
+                              if (esAutor || esModerador)
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  tooltip: esModerador && !esAutor ? 'Eliminar (Como Moderador)' : 'Eliminar',
+                                  onPressed: () => _confirmarEliminacion(context, apunteId, urlDescarga),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -291,11 +386,34 @@ class _VistaSubirState extends State<VistaSubir> {
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _materiaController = TextEditingController();
   bool _estaCargando = false;
+  File? _archivoFisico;
+  String? _nombreArchivoOriginal;
+
+  Future<void> _seleccionarPDF() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
+    if (result != null && result.files.single.path != null) {
+      setState(() {
+        _archivoFisico = File(result.files.single.path!);
+        _nombreArchivoOriginal = result.files.single.name;
+        // Autocompleta el nombre si el usuario no ha escrito nada
+        if (_nombreController.text.isEmpty) {
+          _nombreController.text = _nombreArchivoOriginal!.replaceAll('.pdf', '');
+        }
+      });
+    }
+  }
 
   void _guardarApunte() async {
     if (_nombreController.text.trim().isEmpty || _materiaController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, completa todos los campos.'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Completa todos los campos.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    if (_archivoFisico == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Debes seleccionar un archivo PDF.'), backgroundColor: Colors.orange),
       );
       return;
     }
@@ -306,20 +424,34 @@ class _VistaSubirState extends State<VistaSubir> {
       final User? usuario = FirebaseAuth.instance.currentUser;
       if (usuario == null) throw Exception('Debes iniciar sesión para subir material');
 
+      // 1. Subir el PDF a Firebase Storage
+      String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+      Reference ref = FirebaseStorage.instance.ref().child('apuntes_globales/${timestamp}_$_nombreArchivoOriginal');
+      UploadTask uploadTask = ref.putFile(_archivoFisico!);
+      TaskSnapshot snapshot = await uploadTask;
+      String urlDescarga = await snapshot.ref.getDownloadURL();
+
+      // 2. Guardar la referencia en Firestore
       await FirebaseFirestore.instance.collection('apuntes').add({
         'nombre_archivo': _nombreController.text.trim(),
         'materia': _materiaController.text.trim(),
+        'url': urlDescarga, // Enlace real de descarga
         'autor_id': usuario.uid,
-        'autor_nombre': usuario.displayName ?? 'Estudiante',
+        'autor_nombre': usuario.displayName ?? 'Estudiante UA',
         'fecha_subida': FieldValue.serverTimestamp(),
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('¡Material guardado exitosamente!'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('¡Material publicado exitosamente!'), backgroundColor: Colors.green),
         );
+        // Limpiamos el formulario
         _nombreController.clear();
         _materiaController.clear();
+        setState(() {
+          _archivoFisico = null;
+          _nombreArchivoOriginal = null;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -328,9 +460,7 @@ class _VistaSubirState extends State<VistaSubir> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _estaCargando = false);
-      }
+      if (mounted) setState(() => _estaCargando = false);
     }
   }
 
@@ -341,38 +471,47 @@ class _VistaSubirState extends State<VistaSubir> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const SizedBox(height: 40),
-          const Icon(Icons.cloud_upload, size: 100, color: Colors.blue),
-          const SizedBox(height: 40),
+          const SizedBox(height: 20),
+          const Icon(Icons.cloud_upload, size: 80, color: Colors.blue),
+          const SizedBox(height: 20),
+          
+          // Botón para seleccionar el archivo
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _archivoFisico == null ? Colors.blue.shade50 : Colors.green.shade50,
+              foregroundColor: _archivoFisico == null ? Colors.blue.shade700 : Colors.green.shade700,
+              elevation: 0,
+            ),
+            onPressed: _seleccionarPDF,
+            icon: Icon(_archivoFisico == null ? Icons.attach_file : Icons.check_circle),
+            label: Text(_archivoFisico == null ? 'Seleccionar PDF' : 'PDF Seleccionado'),
+          ),
+          if (_nombreArchivoOriginal != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text('Archivo: $_nombreArchivoOriginal', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            ),
+
+          const SizedBox(height: 30),
           TextField(
             controller: _nombreController,
-            decoration: const InputDecoration(
-              labelText: 'Nombre del Archivo (Ej: Guía de Área)',
-              border: UnderlineInputBorder(),
-            ),
+            decoration: const InputDecoration(labelText: 'Nombre del Archivo (Ej: Guía de Área)', border: UnderlineInputBorder()),
           ),
           const SizedBox(height: 20),
           TextField(
             controller: _materiaController,
-            decoration: const InputDecoration(
-              labelText: 'Materia (Ej: Cálculo II)',
-              border: UnderlineInputBorder(),
-            ),
+            decoration: const InputDecoration(labelText: 'Materia (Ej: Cálculo II)', border: UnderlineInputBorder()),
           ),
           const SizedBox(height: 40),
           SizedBox(
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade50,
-                foregroundColor: Colors.blue.shade700,
-                elevation: 0,
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
               onPressed: _estaCargando ? null : _guardarApunte,
               child: _estaCargando
-                  ? const SizedBox(height: 25, width: 25, child: CircularProgressIndicator()) 
-                  : const Text('Guardar Material', style: TextStyle(fontSize: 16)),
+                  ? const SizedBox(height: 25, width: 25, child: CircularProgressIndicator(color: Colors.white)) 
+                  : const Text('Publicar Material', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
           ),
         ],

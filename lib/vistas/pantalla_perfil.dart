@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart' as google_auth;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'pantalla_dashboard.dart';
 
 class PantallaPerfil extends StatefulWidget {
   const PantallaPerfil({super.key});
@@ -64,7 +66,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
       },
     );
   }
-
+  
   void _mostrarDialogoCambiarClave() {
     final TextEditingController claveActualController = TextEditingController();
     final TextEditingController claveNuevaController = TextEditingController();
@@ -196,6 +198,35 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
             onPressed: () => _confirmarCerrarSesion(context),
             icon: const Icon(Icons.logout),
             label: const Text('Cerrar Sesión'),
+          ),
+          // BOTÓN EXCLUSIVO PARA MODERADORES
+          FutureBuilder<DocumentSnapshot>(
+            future: FirebaseFirestore.instance.collection('usuarios').doc(user?.uid).get(),
+            builder: (context, snapshot) {
+              if (snapshot.hasData && snapshot.data!.exists) {
+                var datos = snapshot.data!.data() as Map<String, dynamic>;
+                if (datos['rol'] == 'moderador') {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 20),
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueGrey.shade900,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const PantallaDashboard()),
+                        );
+                      },
+                      icon: const Icon(Icons.analytics),
+                      label: const Text('Panel de Administración'),
+                    ),
+                  );
+                }
+              }
+              return const SizedBox.shrink(); // Si no es moderador, no muestra nada
+            },
           ),
         ],
       ),
