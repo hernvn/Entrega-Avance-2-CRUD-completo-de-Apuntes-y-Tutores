@@ -43,6 +43,8 @@ dependencies:
   google_sign_in: ^6.2.1
   pie_chart: ^5.4.0
   connectivity_plus: ^7.1.1
+  firebase_messaging: ^15.2.10
+  flutter_local_notifications: ^17.2.2
 
 dev_dependencies:
   flutter_test:
