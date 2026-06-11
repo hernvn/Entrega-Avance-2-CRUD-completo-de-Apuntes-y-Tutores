@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <-- Agregamos autenticación directa
 import 'package:pie_chart/pie_chart.dart';
 import 'pantalla_reportes.dart';
+import 'pantalla_gestion_usuarios.dart';
 
 class PantallaDashboard extends StatefulWidget {
-  const PantallaDashboard({super.key});
+  final String? rolUsuario;
+
+  const PantallaDashboard({super.key, this.rolUsuario = 'estudiante'});
 
   @override
   State<PantallaDashboard> createState() => _PantallaDashboardState();
@@ -15,16 +19,29 @@ class _PantallaDashboardState extends State<PantallaDashboard> {
   int totalApuntes = 0;
   int totalCursos = 0;
   bool cargandoMetricas = true;
+  String rolActual = 'estudiante'; // <-- Esta variable manejará el estado real
 
   @override
   void initState() {
     super.initState();
+    rolActual = widget.rolUsuario ?? 'estudiante'; // Inicializa con el valor recibido
     _cargarMetricas();
   }
 
   Future<void> _cargarMetricas() async {
     try {
-      // Usamos .count() que es ultra rápido y no gasta lecturas en Firebase
+      // VALIDACIÓN EN TIEMPO REAL: Consultamos a Firebase el rol exacto del usuario actual
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        final userDoc = await FirebaseFirestore.instance.collection('usuarios').doc(uid).get();
+        if (userDoc.exists && mounted) {
+          setState(() {
+            rolActual = (userDoc.data() as Map<String, dynamic>)['rol'] ?? 'estudiante';
+          });
+        }
+      }
+
+      // Carga de KPIs normales
       final usuariosSnap = await FirebaseFirestore.instance.collection('usuarios').count().get();
       final apuntesSnap = await FirebaseFirestore.instance.collection('apuntes').count().get();
       final cursosSnap = await FirebaseFirestore.instance.collection('cursos').count().get();
@@ -45,7 +62,6 @@ class _PantallaDashboardState extends State<PantallaDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    // Datos para el gráfico circular
     Map<String, double> datosGrafico = {
       "Usuarios": totalUsuarios.toDouble(),
       "Apuntes": totalApuntes.toDouble(),
@@ -54,7 +70,7 @@ class _PantallaDashboardState extends State<PantallaDashboard> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Panel de Control', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text('Panel - Rol detectado: $rolActual', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         backgroundColor: Colors.blueGrey.shade900,
         foregroundColor: Colors.white,
       ),
@@ -69,7 +85,6 @@ class _PantallaDashboardState extends State<PantallaDashboard> {
                   const Text('Métricas Generales', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 15),
                   
-                  // Tarjetas de KPIs
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -83,7 +98,6 @@ class _PantallaDashboardState extends State<PantallaDashboard> {
                   const Text('Distribución del Sistema', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 20),
 
-                  // Gráfico Estadístico
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)]),
@@ -103,7 +117,6 @@ class _PantallaDashboardState extends State<PantallaDashboard> {
 
                   const SizedBox(height: 25),
                   
-                  // BOTÓN DE ACCESO A REPORTES
                   SizedBox(
                     width: double.infinity,
                     height: 55,
@@ -118,18 +131,42 @@ class _PantallaDashboardState extends State<PantallaDashboard> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) => const PantallaReportes()),
-                        );
+                        ).then((_) => _cargarMetricas()); // Al volver de reportes, recarga
                       },
                       icon: const Icon(Icons.admin_panel_settings),
                       label: const Text('Revisar Bandeja de Reportes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ),
+
+                  const SizedBox(height: 15),
+
+                  // EL CANDADO AHORA DEPENDE DEL ROL REAL DE FIREBASE
+                  if (rolActual == 'admin')
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade50,
+                          foregroundColor: Colors.blue.shade800,
+                          elevation: 0,
+                          side: BorderSide(color: Colors.blue.shade200, width: 1),
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const PantallaGestionUsuarios()),
+                          ).then((_) => _cargarMetricas()); // AL VOLVER, REFRESCARÁ TU ROL AL INSTANTE
+                        },
+                        icon: const Icon(Icons.people_alt),
+                        label: const Text('Gestión de Roles de Usuario', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
                   
                   const SizedBox(height: 30),
                   const Text('Actividad Reciente (Materiales)', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 15),
 
-                  // Lista dinámica de actividad reciente
                   StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance.collection('apuntes').orderBy('fecha_subida', descending: true).limit(5).snapshots(),
                     builder: (context, snapshot) {
@@ -162,7 +199,6 @@ class _PantallaDashboardState extends State<PantallaDashboard> {
     );
   }
 
-  // Widget reutilizable para los cuadros de métricas (KPIs)
   Widget _crearTarjetaKPI(String titulo, String valor, IconData icono, Color color) {
     return Expanded(
       child: Card(

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'package:url_launcher/url_launcher.dart';
 
 class PantallaReportes extends StatelessWidget {
   const PantallaReportes({super.key});
@@ -28,7 +28,7 @@ class PantallaReportes extends StatelessWidget {
       // 1. En lugar de borrar, actualizamos el documento para ocultarlo (Soft Delete)
       await FirebaseFirestore.instance.collection('apuntes').doc(apunteId).update({
         'visible': false,
-        'ocultadoPor': 'Moderador', // Podrías poner el UID del moderador si quisieras
+        'ocultadoPor': 'Moderador',
         'fechaOculto': FieldValue.serverTimestamp(),
       });
 
@@ -44,6 +44,30 @@ class PantallaReportes extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error al ocultar: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _verArchivo(BuildContext context, String apunteId) async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('apuntes').doc(apunteId).get();
+      
+      // Asegúrate de que el campo donde guardas el link en Firebase se llame 'url'
+      if (doc.exists && doc.data()!.containsKey('url')) {
+        final url = Uri.parse(doc['url']);
+        if (await canLaunchUrl(url)) {
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+        } else {
+          throw 'No se pudo abrir el enlace del dispositivo.';
+        }
+      } else {
+        throw 'El archivo original ya fue eliminado o no tiene enlace.';
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al abrir evidencia: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -117,20 +141,27 @@ class PantallaReportes extends StatelessWidget {
                       const SizedBox(height: 5),
                       Text(reporte['motivo'] ?? 'Sin motivo especificado', style: const TextStyle(fontSize: 15, fontStyle: FontStyle.italic)),
                       const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
+                      Wrap(
+                        spacing: 8.0,
+                        runSpacing: 8.0,
+                        alignment: WrapAlignment.end,
                         children: [
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white),
+                            onPressed: () => _verArchivo(context, apunteId),
+                            icon: const Icon(Icons.picture_as_pdf),
+                            label: const Text('Ver PDF'),
+                          ),
                           OutlinedButton.icon(
                             onPressed: () => _ignorarReporte(context, reporteId),
                             icon: const Icon(Icons.visibility_off, color: Colors.grey),
                             label: const Text('Ignorar', style: TextStyle(color: Colors.grey)),
                           ),
-                          const SizedBox(width: 10),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
                             onPressed: () => _ocultarMaterialYReporte(context, reporteId, apunteId),
-                            icon: const Icon(Icons.visibility_off),
-                            label: const Text('Ocultar Archivo'),
+                            icon: const Icon(Icons.delete_sweep),
+                            label: const Text('Ocultar'),
                           ),
                         ],
                       ),
