@@ -545,17 +545,42 @@ class _VistaSubirState extends State<VistaSubir> {
   File? _archivoFisico;
   String? _nombreArchivoOriginal;
 
+
+  bool _abriendoBuscador = false;
+
   Future<void> _seleccionarPDF() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
-    if (result != null && result.files.single.path != null) {
-      setState(() {
-        _archivoFisico = File(result.files.single.path!);
-        _nombreArchivoOriginal = result.files.single.name;
-        // Autocompleta el nombre si el usuario no ha escrito nada
-        if (_nombreController.text.isEmpty) {
-          _nombreController.text = _nombreArchivoOriginal!.replaceAll('.pdf', '');
-        }
-      });
+    // Si ya está abriendo el buscador, ignoramos los clics extra
+    if (_abriendoBuscador) return; 
+
+    setState(() {
+      _abriendoBuscador = true; 
+    });
+
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom, 
+        allowedExtensions: ['pdf']
+      );
+      
+      if (result != null && result.files.single.path != null) {
+        setState(() {
+          _archivoFisico = File(result.files.single.path!);
+          _nombreArchivoOriginal = result.files.single.name;
+          // Autocompleta el nombre si el usuario no ha escrito nada
+          if (_nombreController.text.isEmpty) {
+            _nombreController.text = _nombreArchivoOriginal!.replaceAll('.pdf', '');
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error al abrir el buscador de archivos: $e");
+    } finally {
+      // Pase lo que pase (éxito o error), quitamos el candado al final
+      if (mounted) {
+        setState(() {
+          _abriendoBuscador = false; 
+        });
+      }
     }
   }
 
@@ -595,6 +620,14 @@ class _VistaSubirState extends State<VistaSubir> {
         'autor_id': usuario.uid,
         'autor_nombre': usuario.displayName ?? 'Estudiante UA',
         'fecha_subida': FieldValue.serverTimestamp(),
+      });
+
+      await FirebaseFirestore.instance.collection('avisos').add({
+        'titulo': 'Nuevo material de ${_materiaController.text.trim()}',
+        'mensaje': 'Se ha publicado el archivo "${_nombreController.text.trim()}". ¡Échale un vistazo!',
+        'fecha': FieldValue.serverTimestamp(),
+        'url': urlDescarga,
+        'tipo': 'material'
       });
 
       if (mounted) {

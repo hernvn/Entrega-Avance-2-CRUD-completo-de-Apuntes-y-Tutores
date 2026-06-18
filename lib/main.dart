@@ -4,11 +4,13 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'vistas/pantalla_splash.dart';
 import 'connectivity_service.dart';
+import 'vistas/pantalla_avisos.dart';
 
-// 1. Instancia global para las notificaciones locales
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+bool abrirAvisosAlInicio = false;
 
-// 2. Definición del canal de alta importancia
 const AndroidNotificationChannel channel = AndroidNotificationChannel(
   'high_importance_channel',
   'Notificaciones Importantes',
@@ -18,43 +20,53 @@ const AndroidNotificationChannel channel = AndroidNotificationChannel(
 
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  debugPrint("¡Mensaje recibido en segundo plano: ${message.messageId}");
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-
-  // Configurar notificaciones
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  await initNotifications();
+  
+  RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+  if (initialMessage != null) {
+    abrirAvisosAlInicio = true;
+  }
 
+  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (navigatorKey.currentState != null) {
+        navigatorKey.currentState!.push(
+          MaterialPageRoute(builder: (_) => const PantallaAvisos()),
+        );
+      }
+    });
+  });
+
+  await initNotifications();
   runApp(const CampusSyncApp());
 }
 
 Future<void> initNotifications() async {
   FirebaseMessaging messaging = FirebaseMessaging.instance;
-
   await messaging.requestPermission(alert: true, badge: true, sound: true);
 
-  // Configuration for Android
   const AndroidInitializationSettings initializationSettingsAndroid =
       AndroidInitializationSettings('@mipmap/ic_launcher');
 
-  // Configuration for iOS (Required by most versions even for Android apps)
-  const DarwinInitializationSettings initializationSettingsIOS =
-      DarwinInitializationSettings();
-
-  // Combined settings
   const InitializationSettings initializationSettings = InitializationSettings(
     android: initializationSettingsAndroid,
-    iOS: initializationSettingsIOS, 
   );
 
   await flutterLocalNotificationsPlugin.initialize(
     initializationSettings,
     onDidReceiveNotificationResponse: (NotificationResponse details) {
-      debugPrint("Notificación tocada: ${details.payload}");
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (navigatorKey.currentState != null) {
+          navigatorKey.currentState!.push(
+            MaterialPageRoute(builder: (_) => const PantallaAvisos()),
+          );
+        }
+      });
     },
   );
 
@@ -67,7 +79,6 @@ Future<void> initNotifications() async {
     AndroidNotification? android = message.notification?.android;
 
     if (notification != null && android != null) {
-      // Use positional arguments (standard for v17/18)
       flutterLocalNotificationsPlugin.show(
         notification.hashCode,
         notification.title,
@@ -76,18 +87,16 @@ Future<void> initNotifications() async {
           android: AndroidNotificationDetails(
             'high_importance_channel',
             'Notificaciones Importantes',
-            channelDescription: 'Este canal se usa para notificaciones importantes.',
+            channelDescription: 'Canal de avisos importantes',
             importance: Importance.high,
             priority: Priority.high,
             icon: '@mipmap/ic_launcher',
           ),
         ),
+        payload: 'click_aviso',
       );
     }
   });
-
-  String? token = await messaging.getToken();
-  debugPrint("TOKEN FCM: $token");
 }
 
 class CampusSyncApp extends StatefulWidget {
@@ -103,6 +112,7 @@ class _CampusSyncAppState extends State<CampusSyncApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'CampusSync',
       theme: ThemeData(
@@ -115,7 +125,6 @@ class _CampusSyncAppState extends State<CampusSyncApp> {
           initialData: true,
           builder: (context, snapshot) {
             final isOnline = snapshot.data ?? true;
-
             return Scaffold(
               body: SafeArea(
                 child: Column(
@@ -133,7 +142,7 @@ class _CampusSyncAppState extends State<CampusSyncApp> {
                           const SizedBox(width: 8),
                           Text(
                             isOnline ? 'CONECTADO' : 'SIN CONEXIÓN',
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
