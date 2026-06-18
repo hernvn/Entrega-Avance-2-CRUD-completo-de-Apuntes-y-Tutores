@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart' as google_auth;
 import 'pantalla_registro.dart';
 import 'pantalla_recuperar.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class PantallaLogin extends StatefulWidget {
   const PantallaLogin({super.key});
@@ -47,6 +48,17 @@ class _PantallaLoginState extends State<PantallaLogin> {
         return;
       }
 
+  
+      if (userCredential.user != null) {
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('usuarios').doc(userCredential.user!.uid).get();
+        if (userDoc.exists) {
+          String rolUsuario = (userDoc.data() as Map<String, dynamic>)['rol'] ?? 'estudiante';
+          // Suscribimos al dispositivo a su rol específico en Firebase Cloud Messaging
+          await FirebaseMessaging.instance.subscribeToTopic('rol_$rolUsuario');
+        }
+      }
+      
+
     } on FirebaseAuthException catch (e) {
       String mensaje = '';
       if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
@@ -82,9 +94,16 @@ class _PantallaLoginState extends State<PantallaLogin> {
             'nombre': user.displayName ?? 'Estudiante UA',
             'correo': user.email ?? '',
             'rol': 'estudiante',
-            'estado': 'activo', // Se asegura el campo de estado al loguearse por primera vez con Google
+            'estado': 'activo', 
             'fechaCreacion': FieldValue.serverTimestamp(),
           });
+        }
+        if (userCredential.user != null) {
+          DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('usuarios').doc(userCredential.user!.uid).get();
+          if (userDoc.exists) {
+            String rolUsuario = (userDoc.data() as Map<String, dynamic>)['rol'] ?? 'estudiante';
+            await FirebaseMessaging.instance.subscribeToTopic('rol_$rolUsuario');
+          }
         }
       }
 
