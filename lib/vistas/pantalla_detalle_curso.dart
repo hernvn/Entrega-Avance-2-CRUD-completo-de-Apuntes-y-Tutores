@@ -129,16 +129,29 @@ class _PantallaDetalleCursoState extends State<PantallaDetalleCurso> {
 
       try {
         String cursoId = widget.curso['id'];
+        String nombreCurso = widget.curso['titulo'] ?? 'Curso';
+        
         Reference ref = FirebaseStorage.instance.ref().child('cursos/$cursoId/materiales/$nombreArchivo');
         UploadTask uploadTask = ref.putFile(archivoFisico);
         TaskSnapshot snapshot = await uploadTask;
         String urlDescarga = await snapshot.ref.getDownloadURL();
 
+        // 1. Guardar el archivo en la subcolección del curso (para consumo interno)
         await FirebaseFirestore.instance.collection('cursos').doc(cursoId).collection('materiales').add({
           'nombre': nombreArchivo,
           'url': urlDescarga,
           'fechaSubida': FieldValue.serverTimestamp(),
           'subidoPor': FirebaseAuth.instance.currentUser?.uid,
+        });
+
+        // 2. NUEVO: Generar el aviso global enlazando la URL de descarga
+        await FirebaseFirestore.instance.collection('avisos').add({
+          'titulo': 'Nuevo material en $nombreCurso',
+          'mensaje': 'Se ha publicado el archivo "$nombreArchivo". ¡Pasa a revisarlo!',
+          'fecha': FieldValue.serverTimestamp(),
+          'url': urlDescarga,
+          'tipo': 'material_curso',
+          'cursoId': cursoId,
         });
 
         if (!mounted) return;

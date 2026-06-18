@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import '../main.dart'; 
 import 'pantalla_cursos.dart';
 import 'pantalla_perfil.dart';
 import 'vistas_secundarias.dart';
-
+import 'pantalla_avisos.dart';
+import 'pantalla_biblioteca.dart';
 class PantallaInicio extends StatefulWidget {
   const PantallaInicio({super.key});
 
@@ -22,12 +24,54 @@ class _PantallaInicioState extends State<PantallaInicio> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // Espera a que termine el renderizado del primer frame de la PantallaInicio
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (abrirAvisosAlInicio) {
+        abrirAvisosAlInicio = false; // Bajamos la bandera inmediatamente
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const PantallaAvisos()),
+          );
+        }
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('CampusSync', style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         automaticallyImplyLeading: false, 
+        actions: [
+          // NUEVO: Acceso a la Biblioteca Virtual (API Externa)
+          IconButton(
+            icon: const Icon(Icons.local_library, color: Colors.blue),
+            tooltip: 'Biblioteca Virtual',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PantallaBiblioteca()),
+              );
+            },
+          ),
+          // Botón de notificaciones que ya tenías
+          IconButton(
+            icon: const Icon(Icons.notifications_active, color: Colors.blue),
+            tooltip: 'Ver Avisos',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PantallaAvisos()),
+              );
+            },
+          ),
+          const SizedBox(width: 10),
+        ],
       ),
       body: _paginas[_indiceActual], 
       bottomNavigationBar: NavigationBar(

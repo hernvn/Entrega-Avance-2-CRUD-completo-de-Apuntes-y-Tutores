@@ -5,6 +5,8 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'pantalla_asistente.dart'; // <-- Importación del Asistente IA
+
 class VistaApuntes extends StatefulWidget {
   const VistaApuntes({super.key});
 
@@ -128,14 +130,13 @@ class _VistaApuntesState extends State<VistaApuntes> {
                   try {
                     final String uidActual = FirebaseAuth.instance.currentUser?.uid ?? 'desconocido';
                     
-                    // Guardamos el reporte en una nueva colección para los moderadores
                     await FirebaseFirestore.instance.collection('reportes').add({
                       'apunteId': apunteId,
                       'nombreArchivo': nombreArchivo,
                       'motivo': motivoController.text.trim(),
                       'reportadoPor': uidActual,
                       'fechaReporte': FieldValue.serverTimestamp(),
-                      'estado': 'pendiente', // Para que el moderador sepa si ya lo revisó
+                      'estado': 'pendiente',
                     });
 
                     if (context.mounted) {
@@ -170,7 +171,6 @@ class _VistaApuntesState extends State<VistaApuntes> {
 
     return Column(
       children: [
-        // BARRA DE BÚSQUEDA
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: TextField(
@@ -189,7 +189,6 @@ class _VistaApuntesState extends State<VistaApuntes> {
                 borderRadius: BorderRadius.circular(30),
                 borderSide: BorderSide.none,
               ),
-              // Sombra sutil para la barra
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(30),
                 borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
@@ -201,8 +200,6 @@ class _VistaApuntesState extends State<VistaApuntes> {
             ),
           ),
         ),
-
-        // LISTA DE APUNTES
         Expanded(
           child: FutureBuilder<DocumentSnapshot>(
             future: FirebaseFirestore.instance.collection('usuarios').doc(uidActual).get(),
@@ -232,15 +229,10 @@ class _VistaApuntesState extends State<VistaApuntes> {
                     );
                   }
 
-                  
-                  // LÓGICA DE FILTRADO LOCAL Y SOFT DELETE
                   final apuntesFiltrados = snapshot.data!.docs.where((doc) {
                     var data = doc.data() as Map<String, dynamic>;
-                    
-                    // 1. Si el archivo fue marcado como oculto por un moderador, no se muestra a nadie
                     if (data['visible'] == false) return false;
 
-                    // 2. Lógica del buscador
                     String nombreArchivo = (data['nombre_archivo'] ?? '').toString().toLowerCase();
                     String materia = (data['materia'] ?? '').toString().toLowerCase();
                     
@@ -273,7 +265,6 @@ class _VistaApuntesState extends State<VistaApuntes> {
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              // Botón de descargar
                               IconButton(
                                 icon: const Icon(Icons.download_rounded, color: Colors.blue),
                                 tooltip: 'Descargar',
@@ -285,24 +276,18 @@ class _VistaApuntesState extends State<VistaApuntes> {
                                   }
                                 },
                               ),
-                              
-                              // Si es el autor, puede editar
                               if (esAutor)
                                 IconButton(
                                   icon: const Icon(Icons.edit, color: Colors.orange),
                                   tooltip: 'Editar',
                                   onPressed: () => _mostrarDialogoEdicion(context, apunteId, apunte['nombre_archivo'], apunte['materia']),
                                 ),
-                                
-                              // Si es autor o moderador, puede eliminar
                               if (esAutor || esModerador)
                                 IconButton(
                                   icon: const Icon(Icons.delete, color: Colors.red),
                                   tooltip: esModerador && !esAutor ? 'Eliminar (Como Moderador)' : 'Eliminar',
                                   onPressed: () => _confirmarEliminacion(context, apunteId, urlDescarga),
                                 ),
-                                
-                              // NUEVO: Si NO es el autor, le sale la bandera para reportar
                               if (!esAutor)
                                 IconButton(
                                   icon: const Icon(Icons.flag_outlined, color: Colors.orange),
@@ -427,7 +412,6 @@ class _VistaTutoresState extends State<VistaTutores> {
     return Scaffold(
       body: Column(
         children: [
-          // BARRA DE BÚSQUEDA
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
@@ -457,8 +441,6 @@ class _VistaTutoresState extends State<VistaTutores> {
               ),
             ),
           ),
-
-          // LISTA DE TUTORES
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance.collection('tutores').orderBy('fecha', descending: true).snapshots(),
@@ -466,42 +448,74 @@ class _VistaTutoresState extends State<VistaTutores> {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator()); 
                 }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(child: Text('No hay tutores disponibles aún.'));
+                
+                List<DocumentSnapshot> tutoresFiltrados = [];
+                if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+                  tutoresFiltrados = snapshot.data!.docs.where((doc) {
+                    var data = doc.data() as Map<String, dynamic>;
+                    String nombre = (data['nombre'] ?? '').toString().toLowerCase();
+                    String especialidad = (data['especialidad'] ?? '').toString().toLowerCase();
+                    String descripcion = (data['descripcion'] ?? '').toString().toLowerCase();
+                    
+                    if (_textoBusqueda.isEmpty) return true;
+                    return nombre.contains(_textoBusqueda) || 
+                           especialidad.contains(_textoBusqueda) || 
+                           descripcion.contains(_textoBusqueda);
+                  }).toList();
                 }
 
-                // LÓGICA DE FILTRADO LOCAL
-                final tutoresFiltrados = snapshot.data!.docs.where((doc) {
-                  var data = doc.data() as Map<String, dynamic>;
-                  String nombre = (data['nombre'] ?? '').toString().toLowerCase();
-                  String especialidad = (data['especialidad'] ?? '').toString().toLowerCase();
-                  String descripcion = (data['descripcion'] ?? '').toString().toLowerCase();
-                  
-                  if (_textoBusqueda.isEmpty) return true;
-                  return nombre.contains(_textoBusqueda) || 
-                         especialidad.contains(_textoBusqueda) || 
-                         descripcion.contains(_textoBusqueda);
-                }).toList();
-
-                if (tutoresFiltrados.isEmpty) {
-                  return const Center(
-                    child: Text('No se encontraron tutores.', style: TextStyle(color: Colors.grey)),
-                  );
-                }
-
+                // AQUÍ INTEGRAMOS AL ASISTENTE VIRTUAL DE FORMA SEGURA
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  itemCount: tutoresFiltrados.length,
+                  itemCount: tutoresFiltrados.length + 1, // +1 para el Tutor IA
                   itemBuilder: (context, index) {
-                    var tutor = tutoresFiltrados[index].data() as Map<String, dynamic>;
-                    String docId = tutoresFiltrados[index].id;
+                    if (index == 0) {
+                      return Card(
+                        elevation: 4,
+                        margin: const EdgeInsets.only(bottom: 20, top: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                          side: BorderSide(color: Colors.blue.shade300, width: 2),
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.all(16),
+                          leading: const CircleAvatar(
+                            backgroundColor: Colors.blue,
+                            radius: 25,
+                            child: Icon(Icons.smart_toy, color: Colors.white, size: 30),
+                          ),
+                          title: const Text('Tutor IA CampusSync', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
+                          subtitle: const Padding(
+                            padding: EdgeInsets.only(top: 8.0),
+                            child: Text('Disponible 24/7 para resolver tus dudas :)'),
+                          ),
+                          trailing: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.shade800,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const PantallaAsistente()),
+                              );
+                            },
+                            child: const Text('Chatear'),
+                          ),
+                        ),
+                      );
+                    }
+
+                    // Para el resto de los elementos, restamos 1 al índice para compensar al Tutor IA
+                    var tutor = tutoresFiltrados[index - 1].data() as Map<String, dynamic>;
+                    String docId = tutoresFiltrados[index - 1].id;
 
                     return Card(
                       elevation: 3,
                       margin: const EdgeInsets.only(bottom: 15),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: Colors.blue,
+                          backgroundColor: Colors.blueGrey,
                           child: Text(tutor['nombre'][0].toUpperCase(), style: const TextStyle(color: Colors.white)),
                         ),
                         title: Text(tutor['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -544,18 +558,38 @@ class _VistaSubirState extends State<VistaSubir> {
   bool _estaCargando = false;
   File? _archivoFisico;
   String? _nombreArchivoOriginal;
+  bool _abriendoBuscador = false;
 
   Future<void> _seleccionarPDF() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
-    if (result != null && result.files.single.path != null) {
-      setState(() {
-        _archivoFisico = File(result.files.single.path!);
-        _nombreArchivoOriginal = result.files.single.name;
-        // Autocompleta el nombre si el usuario no ha escrito nada
-        if (_nombreController.text.isEmpty) {
-          _nombreController.text = _nombreArchivoOriginal!.replaceAll('.pdf', '');
-        }
-      });
+    if (_abriendoBuscador) return; 
+
+    setState(() {
+      _abriendoBuscador = true; 
+    });
+
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom, 
+        allowedExtensions: ['pdf']
+      );
+      
+      if (result != null && result.files.single.path != null) {
+        setState(() {
+          _archivoFisico = File(result.files.single.path!);
+          _nombreArchivoOriginal = result.files.single.name;
+          if (_nombreController.text.isEmpty) {
+            _nombreController.text = _nombreArchivoOriginal!.replaceAll('.pdf', '');
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error al abrir el buscador de archivos: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _abriendoBuscador = false; 
+        });
+      }
     }
   }
 
@@ -580,28 +614,34 @@ class _VistaSubirState extends State<VistaSubir> {
       final User? usuario = FirebaseAuth.instance.currentUser;
       if (usuario == null) throw Exception('Debes iniciar sesión para subir material');
 
-      // 1. Subir el PDF a Firebase Storage
       String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
       Reference ref = FirebaseStorage.instance.ref().child('apuntes_globales/${timestamp}_$_nombreArchivoOriginal');
       UploadTask uploadTask = ref.putFile(_archivoFisico!);
       TaskSnapshot snapshot = await uploadTask;
       String urlDescarga = await snapshot.ref.getDownloadURL();
 
-      // 2. Guardar la referencia en Firestore
       await FirebaseFirestore.instance.collection('apuntes').add({
         'nombre_archivo': _nombreController.text.trim(),
         'materia': _materiaController.text.trim(),
-        'url': urlDescarga, // Enlace real de descarga
+        'url': urlDescarga, 
         'autor_id': usuario.uid,
         'autor_nombre': usuario.displayName ?? 'Estudiante UA',
         'fecha_subida': FieldValue.serverTimestamp(),
+      });
+
+      // Se mantiene la estructura que permite abrir notificaciones
+      await FirebaseFirestore.instance.collection('avisos').add({
+        'titulo': 'Nuevo material de ${_materiaController.text.trim()}',
+        'mensaje': 'Se ha publicado el archivo "${_nombreController.text.trim()}". ¡Échale un vistazo!',
+        'fecha': FieldValue.serverTimestamp(), 
+        'url': urlDescarga,
+        'tipo': 'material'
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('¡Material publicado exitosamente!'), backgroundColor: Colors.green),
         );
-        // Limpiamos el formulario
         _nombreController.clear();
         _materiaController.clear();
         setState(() {
@@ -630,8 +670,6 @@ class _VistaSubirState extends State<VistaSubir> {
           const SizedBox(height: 20),
           const Icon(Icons.cloud_upload, size: 80, color: Colors.blue),
           const SizedBox(height: 20),
-          
-          // Botón para seleccionar el archivo
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: _archivoFisico == null ? Colors.blue.shade50 : Colors.green.shade50,
@@ -647,7 +685,6 @@ class _VistaSubirState extends State<VistaSubir> {
               padding: const EdgeInsets.only(top: 8.0),
               child: Text('Archivo: $_nombreArchivoOriginal', style: const TextStyle(fontSize: 12, color: Colors.grey)),
             ),
-
           const SizedBox(height: 30),
           TextField(
             controller: _nombreController,

@@ -200,12 +200,16 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
             label: const Text('Cerrar Sesión'),
           ),
           // BOTÓN EXCLUSIVO PARA MODERADORES
+          // BOTÓN PARA ADMINS Y MODERADORES
           FutureBuilder<DocumentSnapshot>(
             future: FirebaseFirestore.instance.collection('usuarios').doc(user?.uid).get(),
             builder: (context, snapshot) {
               if (snapshot.hasData && snapshot.data!.exists) {
                 var datos = snapshot.data!.data() as Map<String, dynamic>;
-                if (datos['rol'] == 'moderador') {
+                String rolActual = datos['rol'] ?? 'estudiante'; // Extraemos el rol de forma segura
+                
+                // Permitimos que TANTO el admin como el moderador vean el botón
+                if (rolActual == 'moderador' || rolActual == 'admin') {
                   return Padding(
                     padding: const EdgeInsets.only(top: 20),
                     child: ElevatedButton.icon(
@@ -216,7 +220,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => const PantallaDashboard()),
+                          // AQUÍ SE SOLUCIONA EL ERROR: Pasamos la variable y quitamos el 'const'
+                          MaterialPageRoute(builder: (context) => PantallaDashboard(rolUsuario: rolActual)),
                         );
                       },
                       icon: const Icon(Icons.analytics),
@@ -225,7 +230,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   );
                 }
               }
-              return const SizedBox.shrink(); // Si no es moderador, no muestra nada
+              return const SizedBox.shrink(); // Si es estudiante, no muestra nada
             },
           ),
         ],
