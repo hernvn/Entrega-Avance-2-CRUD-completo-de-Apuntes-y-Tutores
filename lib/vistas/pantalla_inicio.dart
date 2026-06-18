@@ -4,7 +4,7 @@ import 'pantalla_cursos.dart';
 import 'pantalla_perfil.dart';
 import 'vistas_secundarias.dart';
 import 'pantalla_avisos.dart';
-
+import 'pantalla_biblioteca.dart';
 class PantallaInicio extends StatefulWidget {
   const PantallaInicio({super.key});
 
@@ -48,6 +48,18 @@ class _PantallaInicioState extends State<PantallaInicio> {
         centerTitle: true,
         automaticallyImplyLeading: false, 
         actions: [
+          // NUEVO: Acceso a la Biblioteca Virtual (API Externa)
+          IconButton(
+            icon: const Icon(Icons.local_library, color: Colors.blue),
+            tooltip: 'Biblioteca Virtual',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PantallaBiblioteca()),
+              );
+            },
+          ),
+          // Botón de notificaciones que ya tenías
           IconButton(
             icon: const Icon(Icons.notifications_active, color: Colors.blue),
             tooltip: 'Ver Avisos',
